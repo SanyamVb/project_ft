@@ -69,7 +69,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         logging_steps=10,
         weight_decay=0.01,
         warmup_ratio=0.1,
-        completion_only_loss=True,
+        completion_only_loss=False,
     )
 
     callbacks = [
