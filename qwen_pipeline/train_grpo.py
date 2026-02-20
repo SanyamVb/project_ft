@@ -1,3 +1,7 @@
+# Disable Unsloth's compiler to avoid completion_mask dimension mismatch
+import os
+os.environ["UNSLOTH_COMPILE_DISABLE"] = "1"
+
 # needs to be at the top for patching
 from unsloth import FastLanguageModel
 
