@@ -36,11 +36,6 @@ def init_model_for_sft(config: Config):
     return model, tokenizer
 
 
-def formatting_func(examples):
-    """Format messages into chat template for SFTTrainer."""
-    return examples["messages"]
-
-
 def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     """Run SFT training with Unsloth + TRL SFTTrainer."""
     model, tokenizer = init_model_for_sft(config)
@@ -51,7 +46,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         per_device_train_batch_size=config.sft_batch_size,
         gradient_accumulation_steps=config.sft_grad_accum,
         learning_rate=config.sft_lr,
-        max_length=config.max_seq_length,
+        max_seq_length=config.max_seq_length,
         max_grad_norm=config.sft_max_grad_norm,
         optim=config.sft_optim,
         lr_scheduler_type=config.sft_lr_scheduler_type,
@@ -64,7 +59,8 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         logging_steps=10,
         weight_decay=0.01,
         warmup_ratio=0.1,
-        completion_only_loss=False,
+        dataset_text_field="messages",
+        packing=False,
     )
 
     callbacks = [
@@ -79,7 +75,6 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         args=sft_config,
         train_dataset=sft_train,
         eval_dataset=sft_val,
-        formatting_func=formatting_func,
         processing_class=tokenizer,
         callbacks=callbacks,
     )
