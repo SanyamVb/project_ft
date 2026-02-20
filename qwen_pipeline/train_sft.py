@@ -40,12 +40,12 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     """Run SFT training with Unsloth + TRL SFTTrainer."""
     model, tokenizer = init_model_for_sft(config)
     
-    def formatting_func(example):
+    def formatting_func(examples):
         """Format messages field for Unsloth SFTTrainer."""
-        return tokenizer.apply_chat_template(
-            example["messages"],
-            tokenize=False,
-        )
+        return [
+            tokenizer.apply_chat_template(messages, tokenize=False)
+            for messages in examples["messages"]
+        ]
 
     sft_config = SFTConfig(
         output_dir=config.sft_output_dir,
