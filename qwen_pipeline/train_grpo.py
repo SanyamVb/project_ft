@@ -97,6 +97,11 @@ def load_model_for_grpo(config: Config, checkpoint_path: str):
         max_lora_rank=config.lora_rank,
         gpu_memory_utilization=config.grpo_gpu_memory_utilization,
     )
+    # Fix: unsloth expects max_seq_length on the inner model for Qwen3
+    if not hasattr(model, "max_seq_length"):
+        model.max_seq_length = config.max_seq_length
+    if hasattr(model, "model") and not hasattr(model.model, "max_seq_length"):
+        model.model.max_seq_length = config.max_seq_length
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
