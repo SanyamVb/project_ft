@@ -46,7 +46,7 @@ def __load_unsloth_model(path: str, config: Config):
         model = AutoPeftModelForCausalLM.from_pretrained(
             path,
             device_map="auto",
-            attn_implementation=None,
+            attn_implementation="eager",
         )
         tokenizer = AutoTokenizer.from_pretrained(path)
         return model, tokenizer
@@ -57,9 +57,10 @@ def __load_unsloth_model(path: str, config: Config):
         model_name=path,
         max_seq_length=config.max_seq_length,
         load_in_4bit=False,
-        fast_inference=False,
         dtype=None,
     )
+    # Enable inference mode properly
+    FastLanguageModel.for_inference(model)
     return model, tokenizer
 
 
