@@ -80,8 +80,8 @@ def load_model_for_grpo(config: Config, checkpoint_path: str):
     return model, tokenizer
 
 
-def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str):
-    """Run GRPO training on SFT checkpoint."""
+def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str, resume_from_checkpoint: str = None):
+    """Run GRPO training on SFT checkpoint with optional resume."""
     model, tokenizer = load_model_for_grpo(config, sft_checkpoint_path)
 
     vllm_sampling_params = SamplingParams(
@@ -112,7 +112,6 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         save_total_limit=config.grpo_save_total_limit,
         report_to="none",
         output_dir=config.grpo_output_dir,
-        chat_template_kwargs={"enable_thinking": False},
         use_vllm=True,
         mask_truncated_completions=True,
         log_completions=True,
@@ -127,6 +126,6 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         args=training_args,
         train_dataset=grpo_train,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     trainer.save_model(config.grpo_output_dir)
     return model

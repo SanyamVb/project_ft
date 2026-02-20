@@ -54,8 +54,18 @@ def init_model_for_sft(config: Config):
     return model, tokenizer
 
 
-def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
-    """Run SFT training with Unsloth + TRL SFTTrainer."""
+def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_from_checkpoint: str = None):
+    """Run SFT training with optional checkpoint resume."""
+    import os
+    
+    # Auto-detect checkpoint if not provided
+    if resume_from_checkpoint is None and os.path.isdir(config.sft_output_dir):
+        checkpoints = [d for d in os.listdir(config.sft_output_dir) if d.startswith("checkpoint-")]
+        if checkpoints:
+            latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[1]))
+            resume_from_checkpoint = os.path.join(config.sft_output_dir, latest_checkpoint)
+            print(f"Found existing SFT checkpoint, resuming from: {resume_from_checkpoint}")
+    
     model, tokenizer = init_model_for_sft(config)
     
     def formatting_func(examples):
@@ -114,6 +124,6 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         callbacks=callbacks,
     )
 
-    trainer.train()
+    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     trainer.save_model(config.sft_output_dir)
     return model

@@ -36,6 +36,17 @@ def main():
         action="store_true",
         help="Run GRPO after SFT; inference/eval use GRPO checkpoint",
     )
+    parser.add_argument(
+        "--skip_sft",
+        action="store_true",
+        help="Skip SFT training and go straight to GRPO (requires existing SFT checkpoint)",
+    )
+    parser.add_argument(
+        "--resume_from_checkpoint",
+        type=str,
+        default=None,
+        help="Resume training from specific checkpoint path",
+    )
     args = parser.parse_args()
 
     config = Config()
@@ -103,14 +114,36 @@ def main():
     if args.mode in ("full", "train_only"):
         if splits is None:
             splits = get_all_splits(config)
-        print("Running SFT training...")
-        t0 = time.perf_counter()
-        run_sft_train(splits["sft_train"], splits["sft_val"], config)
-        train_time_sec = time.perf_counter() - t0
+        
+        # Check if SFT should be skipped
+        sft_checkpoint = None
+        if args.skip_sft:
+            if os.path.isdir(config.sft_output_dir) and os.path.exists(os.path.join(config.sft_output_dir, "config.json")):
+                print(f"Skipping SFT training, using existing checkpoint: {config.sft_output_dir}")
+                sft_checkpoint = config.sft_output_dir
+            else:
+                raise FileNotFoundError(f"Cannot skip SFT: checkpoint not found at {config.sft_output_dir}")
+        else:
+            print("Running SFT training...")
+            t0 = time.perf_counter()
+            run_sft_train(splits["sft_train"], splits["sft_val"], config, resume_from_checkpoint=args.resume_from_checkpoint)
+            train_time_sec = time.perf_counter() - t0
+            sft_checkpoint = config.sft_output_dir
+        
         if args.run_grpo:
             print("Running GRPO training...")
+            grpo_resume = None
+            # Auto-detect GRPO checkpoint if it exists
+            if os.path.isdir(config.grpo_output_dir):
+                checkpoints = [d for d in os.listdir(config.grpo_output_dir) if d.startswith("checkpoint-")]
+                if checkpoints:
+                    latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[1]))
+                    grpo_resume = os.path.join(config.grpo_output_dir, latest_checkpoint)
+                    print(f"Found existing GRPO checkpoint, will resume from: {grpo_resume}")
             run_grpo_train(
-                splits["grpo_train"], config, sft_checkpoint_path=config.sft_output_dir
+                splits["grpo_train"], config, 
+                sft_checkpoint_path=sft_checkpoint or config.sft_output_dir,
+                resume_from_checkpoint=grpo_resume
             )
         if args.mode == "train_only":
             return
