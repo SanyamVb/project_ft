@@ -80,13 +80,12 @@ def create_sft_example(row: pd.Series, config: Config) -> dict:
     completion_content = json.dumps(
         {"topic_flag": topic_flag, "conf_score": config.conf_score_sft}
     )
-    return {
-        "prompt": [
-            {"role": "system", "content": config.system_prompt},
-            {"role": "user", "content": _user_prompt(row)},
-        ],
-        "completion": [{"role": "assistant", "content": completion_content}],
-    }
+    messages = [
+        {"role": "system", "content": config.system_prompt},
+        {"role": "user", "content": _user_prompt(row)},
+        {"role": "assistant", "content": completion_content},
+    ]
+    return {"messages": messages}
 
 
 def create_grpo_example(row: pd.Series, config: Config) -> dict:

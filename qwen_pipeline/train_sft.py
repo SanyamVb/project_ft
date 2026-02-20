@@ -37,13 +37,8 @@ def init_model_for_sft(config: Config):
 
 
 def formatting_func(examples):
-    """Format prompt + completion into chat template for SFTTrainer."""
-    texts = []
-    for prompt, completion in zip(examples["prompt"], examples["completion"]):
-        # Combine prompt and completion messages
-        messages = prompt + completion
-        texts.append(messages)
-    return texts
+    """Format messages into chat template for SFTTrainer."""
+    return examples["messages"]
 
 
 def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
