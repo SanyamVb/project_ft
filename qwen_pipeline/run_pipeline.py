@@ -132,18 +132,10 @@ def main():
         
         if args.run_grpo:
             print("Running GRPO training...")
-            grpo_resume = None
-            # Auto-detect GRPO checkpoint if it exists
-            if os.path.isdir(config.grpo_output_dir):
-                checkpoints = [d for d in os.listdir(config.grpo_output_dir) if d.startswith("checkpoint-")]
-                if checkpoints:
-                    latest_checkpoint = max(checkpoints, key=lambda x: int(x.split("-")[1]))
-                    grpo_resume = os.path.join(config.grpo_output_dir, latest_checkpoint)
-                    print(f"Found existing GRPO checkpoint, will resume from: {grpo_resume}")
             run_grpo_train(
                 splits["grpo_train"], config, 
                 sft_checkpoint_path=sft_checkpoint or config.sft_output_dir,
-                resume_from_checkpoint=grpo_resume
+                resume_from_checkpoint=None  # Don't auto-resume GRPO
             )
         if args.mode == "train_only":
             return

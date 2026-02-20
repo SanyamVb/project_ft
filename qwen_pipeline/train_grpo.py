@@ -126,6 +126,6 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         args=training_args,
         train_dataset=grpo_train,
     )
-    trainer.train(resume_from_checkpoint=resume_from_checkpoint)
+    trainer.train()
     trainer.save_model(config.grpo_output_dir)
     return model
