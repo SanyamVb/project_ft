@@ -7,8 +7,8 @@ MODEL_OPTIONS = {
     "large": "microsoft/deberta-v3-large",
 }
 
-TRAIN_PATH = "data/train_1000_0822_balanced.xlsx"
-TEST_PATH = "data/test_331_0822_balanced.xlsx"
+TRAIN_PATH = "data/train_1000_0822_balanced (3).xlsx"
+TEST_PATH = "data/test_331_0822_balanced (2).xlsx"
 MAX_LENGTH = 1024  # Token limit for (script + topic) vs transcription; increase if inputs still truncated
 NUM_EPOCHS = 5
 BATCH_SIZE = 16
