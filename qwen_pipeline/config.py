@@ -6,7 +6,6 @@ from dataclasses import dataclass, field
 QWEN_MODEL_OPTIONS = {
     "0.6B": "unsloth/Qwen3-0.6B-Base",
     "4B": "Qwen/Qwen3-4B",
-    "8B": "unsloth/Qwen3-8B",
 }
 
 

@@ -36,6 +36,16 @@ def init_model_for_sft(config: Config):
     return model, tokenizer
 
 
+def formatting_func(examples):
+    """Format prompt + completion into chat template for SFTTrainer."""
+    texts = []
+    for prompt, completion in zip(examples["prompt"], examples["completion"]):
+        # Combine prompt and completion messages
+        messages = prompt + completion
+        texts.append(messages)
+    return texts
+
+
 def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     """Run SFT training with Unsloth + TRL SFTTrainer."""
     model, tokenizer = init_model_for_sft(config)
@@ -74,6 +84,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         args=sft_config,
         train_dataset=sft_train,
         eval_dataset=sft_val,
+        formatting_func=formatting_func,
         processing_class=tokenizer,
         callbacks=callbacks,
     )
