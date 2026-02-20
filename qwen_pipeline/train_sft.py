@@ -33,6 +33,24 @@ def init_model_for_sft(config: Config):
     )
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+    
+    # Set default chat template for Qwen models if not present
+    if tokenizer.chat_template is None:
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'system' %}"
+            "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
+            "{% elif message['role'] == 'user' %}"
+            "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
+            "{% elif message['role'] == 'assistant' %}"
+            "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "<|im_start|>assistant\n"
+            "{% endif %}"
+        )
+    
     return model, tokenizer
 
 
