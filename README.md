@@ -104,6 +104,17 @@ python -m qwen_pipeline.run_pipeline --mode train_all
 
 Saves to `outputs_sft_0.6B/`, `outputs_sft_4B/`, `outputs_sft_8B/` with `benchmark_metrics.json`.
 
+### GRPO after SFT
+
+To run GRPO training after SFT (SFT -> GRPO -> inference -> eval):
+
+```bash
+python -m qwen_pipeline.run_pipeline --mode full --run_grpo --model_size 4B
+python -m qwen_pipeline.run_pipeline --mode train_only --run_grpo --model_size 4B
+```
+
+Requires `vllm`. GRPO checkpoints save to `outputs_grpo_{model_size}/`.
+
 ---
 
 ## DeBERTa Cross-Encoder Pipeline

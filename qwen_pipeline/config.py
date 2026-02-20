@@ -52,3 +52,20 @@ class Config:
     max_seq_length: int = 4096
     conf_score_sft: float = 0.95
     system_prompt: str = field(default_factory=lambda: SYSTEM_PROMPT)
+
+    # GRPO (after SFT)
+    grpo_output_dir: str = "outputs_grpo"
+    grpo_learning_rate: float = 5e-6
+    grpo_epochs: int = 1
+    grpo_batch_size: int = 4
+    grpo_grad_accum: int = 4
+    grpo_num_generations: int = 4
+    grpo_max_completion_length: int = 64
+    grpo_temperature: float = 0.7
+    grpo_weight_decay: float = 0.001
+    grpo_warmup_ratio: float = 0.1
+    grpo_lr_scheduler_type: str = "linear"
+    grpo_optim: str = "adamw_8bit"
+    grpo_save_steps: int = 500
+    grpo_save_total_limit: int = 10
+    grpo_gpu_memory_utilization: float = 0.8

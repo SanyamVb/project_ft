@@ -8,6 +8,7 @@ import time
 from .config import Config, QWEN_MODEL_OPTIONS
 from .dataset_utils import get_all_splits
 from .train_sft import run_sft_train
+from .train_grpo import run_grpo_train
 from .inference import load_trained_model, predict_batch
 from .eval_utils import evaluate_predictions
 
@@ -30,6 +31,11 @@ def main():
         default=None,
         help="Qwen model size: 0.6B, 4B, or 8B",
     )
+    parser.add_argument(
+        "--run_grpo",
+        action="store_true",
+        help="Run GRPO after SFT; inference/eval use GRPO checkpoint",
+    )
     args = parser.parse_args()
 
     config = Config()
@@ -38,6 +44,7 @@ def main():
     if args.model_size:
         config.llm_model = QWEN_MODEL_OPTIONS[args.model_size]
         config.sft_output_dir = f"outputs_sft_{args.model_size}"
+        config.grpo_output_dir = f"outputs_grpo_{args.model_size}"
     if args.output_dir:
         config.sft_output_dir = args.output_dir
 
@@ -100,13 +107,21 @@ def main():
         t0 = time.perf_counter()
         run_sft_train(splits["sft_train"], splits["sft_val"], config)
         train_time_sec = time.perf_counter() - t0
+        if args.run_grpo:
+            print("Running GRPO training...")
+            run_grpo_train(
+                splits["grpo_train"], config, sft_checkpoint_path=config.sft_output_dir
+            )
         if args.mode == "train_only":
             return
 
     if args.mode in ("full", "inference_only", "eval_only"):
         if splits is None:
             splits = get_all_splits(config)
-        checkpoint = args.checkpoint or config.sft_output_dir
+        checkpoint = (
+            args.checkpoint
+            or (config.grpo_output_dir if args.run_grpo else config.sft_output_dir)
+        )
         if not os.path.isdir(checkpoint):
             raise FileNotFoundError(
                 f"Checkpoint not found: {checkpoint}. Run training first or pass --checkpoint /path/to/model"
@@ -132,8 +147,9 @@ def main():
         print("Confusion matrix:")
         print(metrics["confusion_matrix"])
 
-        os.makedirs(config.sft_output_dir, exist_ok=True)
-        out_path = os.path.join(config.sft_output_dir, "eval_metrics.json")
+        output_dir = config.grpo_output_dir if args.run_grpo else config.sft_output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        out_path = os.path.join(output_dir, "eval_metrics.json")
         with open(out_path, "w") as f:
             json.dump({
                 "accuracy": metrics["accuracy"],
@@ -156,9 +172,9 @@ def main():
             "score": metrics["score"],
             "mean_score": metrics["mean_score"],
             "best_threshold": 0.5,
-            "checkpoint_path": config.sft_output_dir,
+            "checkpoint_path": output_dir,
         }
-        benchmark_path = os.path.join(config.sft_output_dir, "benchmark_metrics.json")
+        benchmark_path = os.path.join(output_dir, "benchmark_metrics.json")
         with open(benchmark_path, "w") as f:
             json.dump(benchmark, f, indent=2)
         print(f"Benchmark metrics saved to {benchmark_path}")
