@@ -43,7 +43,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     def formatting_func(examples):
         """Format messages field for Unsloth SFTTrainer."""
         return [
-            tokenizer.apply_chat_template(messages, tokenize=False)
+            tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
             for messages in examples["messages"]
         ]
 
