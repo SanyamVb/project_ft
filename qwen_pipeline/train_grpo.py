@@ -105,6 +105,7 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
     )
 
     training_args = GRPOConfig(
+        remove_unused_columns=False,
         vllm_sampling_params=vllm_sampling_params,
         temperature=config.grpo_temperature,
         learning_rate=config.grpo_learning_rate,
