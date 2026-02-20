@@ -42,10 +42,20 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     
     def formatting_func(examples):
         """Format messages field for Unsloth SFTTrainer."""
-        return [
-            tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-            for messages in examples["messages"]
-        ]
+        # Handle both single example (dict) and batched examples
+        if isinstance(examples["messages"][0], dict):
+            # Single example: examples["messages"] is a list of message dicts
+            return tokenizer.apply_chat_template(
+                examples["messages"], 
+                tokenize=False, 
+                add_generation_prompt=False
+            )
+        else:
+            # Batched examples: examples["messages"] is a list of conversations
+            return [
+                tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+                for messages in examples["messages"]
+            ]
 
     sft_config = SFTConfig(
         output_dir=config.sft_output_dir,
