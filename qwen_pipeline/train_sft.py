@@ -46,7 +46,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         per_device_train_batch_size=config.sft_batch_size,
         gradient_accumulation_steps=config.sft_grad_accum,
         learning_rate=config.sft_lr,
-        max_length=config.max_seq_length,
+        max_seq_length=config.max_seq_length,
         max_grad_norm=config.sft_max_grad_norm,
         optim=config.sft_optim,
         lr_scheduler_type=config.sft_lr_scheduler_type,
@@ -59,7 +59,7 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         logging_steps=10,
         weight_decay=0.01,
         warmup_ratio=0.1,
-        completion_only_loss=True,
+        packing=False,
     )
 
     callbacks = [
