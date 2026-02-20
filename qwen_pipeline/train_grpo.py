@@ -57,14 +57,20 @@ def _make_check_format(tokenizer):
 
 def _make_check_answer(tokenizer):
     def check_answer(completions, ground_truth, **kwargs):
-        # In GRPO, we have batch_size * num_generations completions
-        # but ground_truth has only batch_size elements
-        # We need to repeat each ground truth for each generation
-        num_generations = len(completions) // len(ground_truth)
-        expanded_ground_truth = [gt for gt in ground_truth for _ in range(num_generations)]
+        # In GRPO, we have batch_size * num_generations completions (flat list)
+        # but ground_truth has only batch_size elements (one per prompt).
+        # Must return len(completions) rewards so it matches check_format and TRL can sum them.
+        n = len(completions)
+        m = len(ground_truth)
+        if m == 0:
+            return [0.0] * n
+        num_generations = max(1, n // m)
         return [
-            3.0 if (r := _parse_answer(c[0]["content"])) is not None and r == gt else 0
-            for c, gt in zip(completions, expanded_ground_truth)
+            3.0
+            if (r := _parse_answer(c[0]["content"])) is not None
+            and r == ground_truth[min(i // num_generations, m - 1)]
+            else 0
+            for i, c in enumerate(completions)
         ]
 
     return check_answer
