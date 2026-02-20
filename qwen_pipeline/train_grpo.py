@@ -11,10 +11,7 @@ from vllm import SamplingParams
 from trl import GRPOConfig, GRPOTrainer
 
 from .config import Config
-from .grpo_trainer_fix import apply_all_fixes
-
-# Apply the fix for completion_mask dimension mismatch
-apply_all_fixes()
+from .grpo_trainer_fix import apply_completion_mask_fix
 
 warnings.filterwarnings("ignore")
 
@@ -142,6 +139,7 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         args=training_args,
         train_dataset=grpo_train,
     )
+    apply_completion_mask_fix(trainer)
     trainer.train()
     trainer.save_model(config.grpo_output_dir)
     return model
