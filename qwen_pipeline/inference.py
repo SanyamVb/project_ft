@@ -43,7 +43,11 @@ def __load_unsloth_model(path: str, config: Config):
     if os.path.exists(adapter_config):
         from peft import AutoPeftModelForCausalLM
 
-        model = AutoPeftModelForCausalLM.from_pretrained(path)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            path,
+            device_map="auto",
+            attn_implementation=None,
+        )
         tokenizer = AutoTokenizer.from_pretrained(path)
         return model, tokenizer
 
@@ -54,6 +58,7 @@ def __load_unsloth_model(path: str, config: Config):
         max_seq_length=config.max_seq_length,
         load_in_4bit=False,
         fast_inference=False,
+        dtype=None,
     )
     return model, tokenizer
 
