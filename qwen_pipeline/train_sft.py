@@ -59,7 +59,6 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         logging_steps=10,
         weight_decay=0.01,
         warmup_ratio=0.1,
-        dataset_text_field="messages",
         packing=False,
     )
 
