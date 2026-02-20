@@ -34,6 +34,10 @@ def _parse_answer(answer: str) -> Optional[bool]:
     )
     try:
         result = json.loads(text)
+        if isinstance(result, list):
+            result = result[0] if len(result) == 1 else {}
+        if not isinstance(result, dict):
+            return None
         val = result.get("topic_flag")
         if isinstance(val, bool):
             return val
