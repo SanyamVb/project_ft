@@ -39,6 +39,13 @@ def init_model_for_sft(config: Config):
 def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
     """Run SFT training with Unsloth + TRL SFTTrainer."""
     model, tokenizer = init_model_for_sft(config)
+    
+    def formatting_func(example):
+        """Format messages field for Unsloth SFTTrainer."""
+        return tokenizer.apply_chat_template(
+            example["messages"],
+            tokenize=False,
+        )
 
     sft_config = SFTConfig(
         output_dir=config.sft_output_dir,
@@ -74,7 +81,10 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         args=sft_config,
         train_dataset=sft_train,
         eval_dataset=sft_val,
-        processing_class=tokenizer,
+        formatting_func=formatting_func,
+        tokenizer=tokenizer,
+        callbacks=callbacks,
+    )
         callbacks=callbacks,
     )
 
