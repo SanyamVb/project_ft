@@ -11,6 +11,10 @@ from vllm import SamplingParams
 from trl import GRPOConfig, GRPOTrainer
 
 from .config import Config
+from .grpo_trainer_fix import apply_all_fixes
+
+# Apply the fix for completion_mask dimension mismatch
+apply_all_fixes()
 
 warnings.filterwarnings("ignore")
 
