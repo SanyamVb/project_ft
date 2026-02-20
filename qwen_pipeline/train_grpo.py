@@ -39,41 +39,43 @@ def _parse_answer(answer: str) -> Optional[bool]:
         return None
 
 
-def _make_check_format(tokenizer):
+def _make_reward_func(tokenizer):
+    """Single combined reward: +2 if format and answer both correct, else -1. Returns one reward per completion."""
     eos = getattr(tokenizer, "eos_token", None) or ""
     response_format_regex = re.compile(
         rf"^(<think>.*?</think>)?(?P<backticks>(`{{3}})?)(json)?{{\"topic_flag\":(?i:true|false), \"conf_score\":[0-1]\.[0-9][0-9]}}(?P=backticks)[\s]{{0,}}(?:{re.escape(eos)})?[\s]{{0,}}$",
         flags=re.DOTALL,
     )
 
-    def check_format(completions, **kwargs):
-        return [
-            3.0 if response_format_regex.search(c[0]["content"]) is not None else 0
-            for c in completions
-        ]
-
-    return check_format
-
-
-def _make_check_answer(tokenizer):
-    def check_answer(completions, ground_truth, **kwargs):
-        # In GRPO, we have batch_size * num_generations completions (flat list)
-        # but ground_truth has only batch_size elements (one per prompt).
-        # Must return len(completions) rewards so it matches check_format and TRL can sum them.
-        n = len(completions)
+    def reward_func(completions, **kwargs):
+        ground_truth = kwargs.get("ground_truth", kwargs.get("solution", []))
+        if ground_truth is not None and not isinstance(ground_truth, (list, tuple)):
+            ground_truth = list(ground_truth)
+        ground_truth = ground_truth or []
+        # Flatten if nested (groups): [[c1,c2],[c3,c4],...] -> [c1,c2,c3,c4,...]
+        flat = []
+        for c in completions:
+            if isinstance(c, (list, tuple)) and c and isinstance(c[0], dict):
+                flat.append(c)
+            elif isinstance(c, (list, tuple)):
+                for sub in c:
+                    flat.append(sub if isinstance(sub, (list, tuple)) and sub and isinstance(sub[0], dict) else [sub])
+            else:
+                flat.append([c] if not isinstance(c, (list, tuple)) else c)
+        n = len(flat)
         m = len(ground_truth)
-        if m == 0:
-            return [0.0] * n
-        num_generations = max(1, n // m)
-        return [
-            3.0
-            if (r := _parse_answer(c[0]["content"])) is not None
-            and r == ground_truth[min(i // num_generations, m - 1)]
-            else 0
-            for i, c in enumerate(completions)
-        ]
+        num_gens = max(1, n // m) if m > 0 else 1
+        result = []
+        for i, c in enumerate(flat):
+            content = c[0]["content"] if c and isinstance(c[0], dict) else str(c)
+            format_ok = response_format_regex.search(content) is not None
+            gt = ground_truth[min(i // num_gens, m - 1)] if m > 0 else None
+            parsed = _parse_answer(content)
+            answer_ok = parsed is not None and gt is not None and parsed == gt
+            result.append(2.0 if (format_ok and answer_ok) else -1.0)
+        return result
 
-    return check_answer
+    return reward_func
 
 
 def load_model_for_grpo(config: Config, checkpoint_path: str):
@@ -127,7 +129,7 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         use_vllm=True,
     )
 
-    reward_funcs = [_make_check_format(tokenizer), _make_check_answer(tokenizer)]
+    reward_funcs = [_make_reward_func(tokenizer)]
 
     trainer = GRPOTrainer(
         model=model,
