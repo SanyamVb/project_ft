@@ -87,6 +87,36 @@ def _make_reward_func(tokenizer):
     return reward_func
 
 
+def _force_set_max_seq_length(model, max_seq_length: int):
+    """Recursively walk the model hierarchy and force-set max_seq_length.
+
+    Unsloth's patched LlamaModel_fast_forward accesses self.max_seq_length on
+    the inner transformer model (e.g. Qwen3Model), but doesn't always assign it
+    — especially through PEFT/LoRA wrappers.  This walks common wrapper paths
+    (PeftModel → LoraModel → CausalLM → BaseModel) and also scans all direct
+    children, unconditionally setting the attribute wherever it makes sense.
+    """
+    # Always set on the top-level model itself
+    model.max_seq_length = max_seq_length
+
+    # Walk known wrapper attributes that may hide the real transformer model
+    obj = model
+    for attr in ("base_model", "model", "model"):
+        child = getattr(obj, attr, None)
+        if child is not None and child is not obj:
+            child.max_seq_length = max_seq_length
+            obj = child
+        else:
+            break
+
+    # Also iterate direct named children and set on any that look like
+    # transformer base-models (class name contains "Model" but not "Lora")
+    for name, module in model.named_modules():
+        cls_name = type(module).__name__
+        if "Model" in cls_name and "Lora" not in cls_name:
+            module.max_seq_length = max_seq_length
+
+
 def load_model_for_grpo(config: Config, checkpoint_path: str):
     """Load SFT checkpoint for GRPO with vLLM (fast_inference=True)."""
     model, tokenizer = FastLanguageModel.from_pretrained(
@@ -97,11 +127,10 @@ def load_model_for_grpo(config: Config, checkpoint_path: str):
         max_lora_rank=config.lora_rank,
         gpu_memory_utilization=config.grpo_gpu_memory_utilization,
     )
-    # Fix: unsloth expects max_seq_length on the inner model for Qwen3
-    if not hasattr(model, "max_seq_length"):
-        model.max_seq_length = config.max_seq_length
-    if hasattr(model, "model") and not hasattr(model.model, "max_seq_length"):
-        model.model.max_seq_length = config.max_seq_length
+    # Fix: unsloth expects max_seq_length on the inner Qwen3Model but
+    # doesn't always propagate it. Walk the model hierarchy and force-set it
+    # on every sub-module that should carry it (CausalLM wrapper + base model).
+    _force_set_max_seq_length(model, config.max_seq_length)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     return model, tokenizer
