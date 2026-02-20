@@ -45,11 +45,11 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         # Handle both single example (dict) and batched examples
         if isinstance(examples["messages"][0], dict):
             # Single example: examples["messages"] is a list of message dicts
-            return tokenizer.apply_chat_template(
+            return [tokenizer.apply_chat_template(
                 examples["messages"], 
                 tokenize=False, 
                 add_generation_prompt=False
-            )
+            )]
         else:
             # Batched examples: examples["messages"] is a list of conversations
             return [
