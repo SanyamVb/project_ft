@@ -57,9 +57,14 @@ def _make_check_format(tokenizer):
 
 def _make_check_answer(tokenizer):
     def check_answer(completions, ground_truth, **kwargs):
+        # In GRPO, we have batch_size * num_generations completions
+        # but ground_truth has only batch_size elements
+        # We need to repeat each ground truth for each generation
+        num_generations = len(completions) // len(ground_truth)
+        expanded_ground_truth = [gt for gt in ground_truth for _ in range(num_generations)]
         return [
             3.0 if (r := _parse_answer(c[0]["content"])) is not None and r == gt else 0
-            for c, gt in zip(completions, ground_truth)
+            for c, gt in zip(completions, expanded_ground_truth)
         ]
 
     return check_answer
