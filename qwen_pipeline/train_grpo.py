@@ -113,8 +113,6 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         report_to="none",
         output_dir=config.grpo_output_dir,
         use_vllm=True,
-        mask_truncated_completions=True,
-        log_completions=True,
     )
 
     reward_funcs = [_make_check_format(tokenizer), _make_check_answer(tokenizer)]
