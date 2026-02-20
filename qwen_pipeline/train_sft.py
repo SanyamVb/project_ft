@@ -85,8 +85,6 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config):
         tokenizer=tokenizer,
         callbacks=callbacks,
     )
-        callbacks=callbacks,
-    )
 
     trainer.train()
     trainer.save_model(config.sft_output_dir)
