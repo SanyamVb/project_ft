@@ -12,7 +12,7 @@ project_ft/
     preflight_check.py
     config.py
     run_pipeline.py
-    train_sft.py
+    train_sft.py![1771678209117](image/README/1771678209117.png)![1771678212773](image/README/1771678212773.png)![1771678223679](image/README/1771678223679.png)![1771678227568](image/README/1771678227568.png)
     inference.py
     dataset_utils.py
     eval_utils.py
