@@ -13,6 +13,14 @@ MAX_LENGTH = 1024  # Token limit for (script + topic) vs transcription; increase
 NUM_EPOCHS = 5
 BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
+
+# Model-size-specific batch sizes (for large models with memory constraints)
+BATCH_SIZE_PER_MODEL = {
+    "xsmall": 32,
+    "small": 32,
+    "base": 16,
+    "large": 8,  # Reduced for memory efficiency
+}
 LEARNING_RATE = 2.77701682113078e-05  # Best from hyperparameter tuning: Trial #7, Kappa=0.8303, Acc=0.9152
 OUTPUT_PREFIX = "models/deberta_cross_encoder"
 WEIGHT_DECAY = 0.01

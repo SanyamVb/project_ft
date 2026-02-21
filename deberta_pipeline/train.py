@@ -21,6 +21,7 @@ from .config import (
     MAX_LENGTH,
     NUM_EPOCHS,
     BATCH_SIZE,
+    BATCH_SIZE_PER_MODEL,
     EVAL_BATCH_SIZE,
     LEARNING_RATE,
     OUTPUT_PREFIX,
@@ -93,11 +94,18 @@ def run_train(
     params_M = round(sum(p.numel() for p in model.parameters()) / 1e6, 1)
     print(f"Parameters: {params_M}M")
 
+    # Use model-size-specific batch size if available
+    batch_size = BATCH_SIZE_PER_MODEL.get(model_size, BATCH_SIZE)
+    # Adjust gradient accumulation to maintain effective batch size
+    grad_accum = max(1, (BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS) // batch_size)
+    
+    print(f"Training config: batch_size={batch_size}, grad_accum={grad_accum} (effective_batch={batch_size * grad_accum})")
+
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=NUM_EPOCHS,
-        per_device_train_batch_size=BATCH_SIZE,
-        gradient_accumulation_steps=GRADIENT_ACCUMULATION_STEPS,
+        per_device_train_batch_size=batch_size,
+        gradient_accumulation_steps=grad_accum,
         per_device_eval_batch_size=EVAL_BATCH_SIZE,
         learning_rate=LEARNING_RATE,
         weight_decay=WEIGHT_DECAY,
