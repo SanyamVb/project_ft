@@ -13,15 +13,15 @@ MAX_LENGTH = 1024  # Token limit for (script + topic) vs transcription; increase
 NUM_EPOCHS = 5
 BATCH_SIZE = 16
 EVAL_BATCH_SIZE = 32
-LEARNING_RATE = 2e-5
+LEARNING_RATE = 1.187415659370706e-05  # Best from hyperparameter tuning (trial 5)
 OUTPUT_PREFIX = "models/deberta_cross_encoder"
 WEIGHT_DECAY = 0.01
-WARMUP_RATIO = 0.1
+WARMUP_RATIO = 0.05  # Best from hyperparameter tuning (trial 5)
 
 # Training optimization (tunable for grid search)
-MAX_GRAD_NORM = 1.0
+MAX_GRAD_NORM = 0.5  # Best from hyperparameter tuning (trial 5)
 GRADIENT_ACCUMULATION_STEPS = 2
-OPTIM = "adamw_torch"
-LR_SCHEDULER_TYPE = "cosine"
+OPTIM = "adamw_torch_fused"  # Best from hyperparameter tuning (trial 5)
+LR_SCHEDULER_TYPE = "linear"  # Best from hyperparameter tuning (trial 5)
 EARLY_STOPPING_PATIENCE = 2
-LABEL_SMOOTHING = 0.1
+LABEL_SMOOTHING = 0.0  # Best from hyperparameter tuning (trial 5)
