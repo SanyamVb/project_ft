@@ -7,7 +7,8 @@ LLM-based and cross-encoder off-topic detection for spoken test-taker responses.
 ```
 project_ft/
   scripts/
-    hyperparameter_search.py  # Optuna hyperparameter tuning
+    __init__.py
+    hyperparameter_search.py  # Optuna hyperparameter tuning with reproducibility
   qwen_pipeline/         # Qwen SFT pipeline (0.6B, 4B, 8B)
     preflight_check.py
     config.py
@@ -182,15 +183,96 @@ Reads from `data/MC OPIC - Off Topic Annotations - Dec-Jan 2025 - Combined.xlsx`
 
 ## Hyperparameter Search
 
-Run Optuna-based hyperparameter search to tune training for better accuracy/kappa:
+Run Optuna-based hyperparameter search to find optimal training hyperparameters for better accuracy/kappa.
+
+### Installation
 
 ```bash
 pip install optuna
-python -m scripts.hyperparameter_search --pipeline deberta --n_trials 20 --output results/tune_deberta.json
-python -m scripts.hyperparameter_search --pipeline qwen --n_trials 15 --model_size 0.6B --output results/tune_qwen.json
 ```
 
-Use `--quick` for faster iterations (fewer epochs / subset of data). Use `--grid` for full grid search on DeBERTa (small search space).
+### Basic Usage
+
+**DeBERTa hyperparameter tuning** (recommended with seed for reproducibility):
+
+```bash
+python -m scripts.hyperparameter_search --pipeline deberta --model_size base --n_trials 20 --seed 42 --output results/tune_deberta.json
+```
+
+**Qwen hyperparameter tuning**:
+
+```bash
+python -m scripts.hyperparameter_search --pipeline qwen --model_size 0.6B --n_trials 15 --seed 42 --output results/tune_qwen.json
+```
+
+### Options
+
+- `--pipeline` - `deberta` or `qwen` (required)
+- `--model_size` - Model size: DeBERTa (`xsmall`, `small`, `base`, `large`), Qwen (`0.6B`, `4B`, `8B`)
+- `--n_trials` - Number of Optuna trials (default: 20)
+- `--seed` - Random seed for reproducibility (recommended: 42)
+- `--quick` - Quick mode: fewer epochs/subset of data for faster testing
+- `--grid` - Use full grid search instead of Optuna (DeBERTa only, exhaustive but slow)
+- `--output` - Output JSON path for results (default: `results/tune_results.json`)
+
+### Hyperparameters Tuned (DeBERTa)
+
+- **Learning Rate**: 1e-5 to 3e-5 (log scale)
+- **Max Gradient Norm**: [0.5, 1.0, 1.5]
+- **Warmup Ratio**: [0.05, 0.1, 0.15]
+- **Label Smoothing**: [0.0, 0.1]
+- **Gradient Accumulation Steps**: [1, 2, 4]
+- **Optimizer**: ["adamw_torch", "adamw_torch_fused"]
+- **LR Scheduler**: ["cosine", "linear"]
+
+### Reproducibility
+
+**Important**: Always use `--seed` for reproducible results. Without it, results will vary between runs due to random initialization.
+
+Each trial uses `seed + trial_number`, ensuring:
+- Same hyperparameter suggestions from Optuna
+- Same weight initialization
+- Same data shuffling
+- Deterministic CUDA operations
+
+### Output
+
+Results are saved to JSON with:
+- Best hyperparameters and kappa score
+- Best trial checkpoint path
+- Statistics: mean kappa ± std across all trials
+- All trial results for analysis
+- Trial state (completed/failed)
+
+### Example Workflow
+
+1. **Quick test** (10 trials, 2 epochs):
+```bash
+python -m scripts.hyperparameter_search --pipeline deberta --model_size base --n_trials 10 --quick --seed 42 --output results/tune_quick.json
+```
+
+2. **Full search** (20 trials, full training):
+```bash
+python -m scripts.hyperparameter_search --pipeline deberta --model_size base --n_trials 20 --seed 42 --output results/tune_deberta_base.json
+```
+
+3. **Apply best parameters** to `deberta_pipeline/config.py` and verify:
+```bash
+# Update config.py with best hyperparameters from JSON
+python -m deberta_pipeline.run_pipeline --mode train --model_size base
+```
+
+4. **Compare results**: Check if kappa matches tuning results. Note: Some variance is normal due to early stopping and different random seeds.
+
+### Grid Search (DeBERTa only)
+
+For exhaustive search over a smaller predefined space:
+
+```bash
+python -m scripts.hyperparameter_search --pipeline deberta --grid --seed 42 --output results/tune_grid.json
+```
+
+Grid search tests all combinations but is slower than Optuna's Bayesian optimization.
 
 ---
 
@@ -203,6 +285,19 @@ Use `--quick` for faster iterations (fewer epochs / subset of data). Use `--grid
 ---
 
 ## Troubleshooting
+
+**Hyperparameter search results not reproducible**
+
+- Always use `--seed` parameter: `python -m scripts.hyperparameter_search --pipeline deberta --seed 42 ...`
+- Without seed, random initialization causes different results each run
+- Even with seed, some variance is expected due to early stopping and GPU non-determinism
+
+**Hyperparameter tuning results don't match when re-training**
+
+- Tuning may have used `--quick` mode (2 epochs) while validation uses full epochs
+- Check the `quick_mode` field in the JSON results
+- Optuna optimizes threshold-adjusted kappa, which may differ from eval metrics during training
+- Consider the mean kappa ± std from the statistics section, not just the best single trial
 
 **Checkpoint not found**
 
