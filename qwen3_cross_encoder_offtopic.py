@@ -28,8 +28,8 @@ if device.type == "cuda":
 print(f"PyTorch version: {torch.__version__}")
 
 # Load data
-train_df = pd.read_excel("data/train_1000_0822_balanced.xlsx")
-test_df = pd.read_excel("data/test_331_0822_balanced.xlsx")
+train_df = pd.read_excel("data/train_0216.xlsx")
+test_df = pd.read_excel("data/test_0216.xlsx")
 
 label_map = {"No": 0, "Yes": 1}
 train_df["label"] = train_df["Final_Annotation"].map(label_map)
