@@ -49,6 +49,13 @@ def __load_unsloth_model(path: str, config: Config):
             attn_implementation="eager",
         )
         tokenizer = AutoTokenizer.from_pretrained(path)
+        
+        # Set max_seq_length attribute for Unsloth compatibility
+        if not hasattr(model, 'max_seq_length'):
+            model.max_seq_length = config.max_seq_length
+        if hasattr(model, 'model') and not hasattr(model.model, 'max_seq_length'):
+            model.model.max_seq_length = config.max_seq_length
+        
         return model, tokenizer
 
     from unsloth import FastLanguageModel
