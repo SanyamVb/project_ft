@@ -58,7 +58,7 @@ def __load_unsloth_model(path: str, config: Config):
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=path,
-        max_seq_length=config.max_position_embeddings,
+        max_position_embeddings=config.max_position_embeddings,
         load_in_4bit=False,
         dtype=None,
     )
