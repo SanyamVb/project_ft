@@ -47,6 +47,13 @@ def main():
         default=None,
         help="Resume training from specific checkpoint path",
     )
+    parser.add_argument(
+        "--training_variant",
+        type=str,
+        choices=["completion_only", "full_finetune"],
+        default="completion_only",
+        help="SFT training variant: completion_only (mask prompts) or full_finetune (train on entire sequence)",
+    )
     args = parser.parse_args()
 
     config = Config()
@@ -54,25 +61,27 @@ def main():
         config.data_path = args.data_path
     if args.model_size:
         config.llm_model = QWEN_MODEL_OPTIONS[args.model_size]
-        config.sft_output_dir = f"outputs_sft_{args.model_size}"
-        config.grpo_output_dir = f"outputs_grpo_{args.model_size}"
+        config.sft_output_dir = f"outputs_sft_{args.model_size}_{args.training_variant}"
+        config.grpo_output_dir = f"outputs_grpo_{args.model_size}_{args.training_variant}"
     if args.output_dir:
         config.sft_output_dir = args.output_dir
+    
+    # Set training variant
+    config.training_variant = args.training_variant
 
     if args.mode == "train_all":
         for size in QWEN_MODEL_OPTIONS:
-            print(f"\n=== Training Qwen {size} ===")
+            print(f"\n=== Training Qwen {size} ({args.training_variant}) ===")
             config.llm_model = QWEN_MODEL_OPTIONS[size]
-            config.sft_output_dir = f"outputs_sft_{size}"
+            config.sft_output_dir = f"outputs_sft_{size}_{args.training_variant}"
+            config.training_variant = args.training_variant
             splits = get_all_splits(config)
             t0 = time.perf_counter()
             run_sft_train(splits["sft_train"], splits["sft_val"], config)
             train_time_sec = time.perf_counter() - t0
             checkpoint = config.sft_output_dir
             model, tokenizer = load_trained_model(config, checkpoint)
-            t1 = time.perf_counter()
-            predictions = predict_batch(splits["test_df"], model, tokenizer, config)
-            inference_time_total = time.perf_counter() - t1
+            predictions, inference_time_total = predict_batch(splits["test_df"], model, tokenizer, config)
             n = len(splits["test_df"])
             inference_time_per_sample_ms = (inference_time_total / n) * 1000 if n > 0 else 0
             metrics = evaluate_predictions(splits["test_df"], predictions)
@@ -80,6 +89,7 @@ def main():
             benchmark = {
                 "family": "qwen",
                 "model_size": size,
+                "training_variant": args.training_variant,
                 "params_M": params_M,
                 "train_time_sec": round(train_time_sec, 2),
                 "inference_time_per_sample_ms": round(inference_time_per_sample_ms, 2),
@@ -102,7 +112,7 @@ def main():
         print("Loading and splitting data...")
         splits = get_all_splits(config)
         train_df, val_df, test_df = splits["train_df"], splits["val_df"], splits["test_df"]
-        print(f"Train: {len(train_df)} | Val: {len(val_df)} | Test: {len(test_df)}")
+        print(f"Train: {len(train_df)} | Test: {len(test_df)} (test set used for validation)")
         print(f"Train balance: {train_df['topic_flag'].value_counts().to_dict()}")
         if args.mode == "process_only":
             return
@@ -154,9 +164,7 @@ def main():
         print("Loading model from", checkpoint)
         model, tokenizer = load_trained_model(config, checkpoint)
         print("Running inference on test set...")
-        t1 = time.perf_counter()
-        predictions = predict_batch(splits["test_df"], model, tokenizer, config)
-        inference_time_total = time.perf_counter() - t1
+        predictions, inference_time_total = predict_batch(splits["test_df"], model, tokenizer, config)
         n = len(splits["test_df"])
         inference_time_per_sample_ms = (inference_time_total / n) * 1000 if n > 0 else 0
 
@@ -189,6 +197,7 @@ def main():
         benchmark = {
             "family": "qwen",
             "model_size": args.model_size or "4B",
+            "training_variant": args.training_variant,
             "params_M": params_M,
             "train_time_sec": round(train_time_sec, 2) if train_time_sec is not None else None,
             "inference_time_per_sample_ms": round(inference_time_per_sample_ms, 2),

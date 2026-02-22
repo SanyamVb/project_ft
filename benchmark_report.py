@@ -70,6 +70,8 @@ def main():
     for r in by_acc:
         fam = r.get("family", "?")
         sz = r.get("model_size", "?")
+        variant = r.get("training_variant", "")
+        variant_s = f"[{variant}]" if variant else ""
         acc = r.get("accuracy") or 0
         kap = r.get("kappa") or 0
         score = r.get("score")
@@ -77,7 +79,7 @@ def main():
         inf = r.get("inference_time_per_sample_ms")
         inf_s = f"{inf:.1f}ms" if inf is not None else "N/A"
         params = r.get("params_M", "?")
-        print(f"  {fam} {sz} ({params}M): acc={acc:.4f} kappa={kap:.4f}{score_s} inf={inf_s}")
+        print(f"  {fam} {sz} {variant_s} ({params}M): acc={acc:.4f} kappa={kap:.4f}{score_s} inf={inf_s}")
 
     print("\n--- Fastest inference ---")
     for r in by_inf[:5]:
@@ -90,10 +92,17 @@ def main():
     print("\n--- Recommendation summary ---")
     if by_acc:
         best = by_acc[0]
-        print(f"  Best accuracy: {best.get('family')} {best.get('model_size')} (acc={best.get('accuracy', 0):.4f})")
+        variant = best.get("training_variant", "")
+        variant_s = f" [{variant}]" if variant else ""
+        print(f"  Best accuracy: {best.get('family')} {best.get('model_size')}{variant_s} (acc={best.get('accuracy', 0):.4f})")
     if by_inf:
         fastest = by_inf[0]
-        print(f"  Fastest: {fastest.get('family')} {fastest.get('model_size')} ({fastest.get('inference_time_per_sample_ms'):.1f}ms/sample)")
+        variant = fastest.get("training_variant", "")
+        variant_s = f" [{variant}]" if variant else ""
+        print(f"  Fastest: {fastest.get('family')} {fastest.get('model_size')}{variant_s} ({fastest.get('inference_time_per_sample_ms'):.1f}ms/sample)")
+    
+    # Training variant comparison (for Qwen models)
+    _print_variant_comparison(results)
 
     _write_csv(results, args.output)
     print(f"\nResults written to {args.output}")
@@ -104,7 +113,7 @@ def main():
 
 def _write_csv(results, path):
     keys = [
-        "family", "model_size", "params_M",
+        "family", "model_size", "training_variant", "params_M",
         "train_time_sec", "inference_time_per_sample_ms",
         "accuracy", "kappa", "score", "mean_score", "best_threshold", "checkpoint_path",
     ]
@@ -146,6 +155,66 @@ def _plot_results(results):
     plt.tight_layout()
     plt.savefig("benchmark_accuracy_vs_inference.png")
     print("Plot saved to benchmark_accuracy_vs_inference.png")
+
+
+def _print_variant_comparison(results):
+    """Print side-by-side comparison of training variants for each model size."""
+    qwen_results = [r for r in results if r.get("family") == "qwen"]
+    if not qwen_results:
+        return
+    
+    # Group by model size
+    by_size = {}
+    for r in qwen_results:
+        size = r.get("model_size", "?")
+        variant = r.get("training_variant", "unknown")
+        if size not in by_size:
+            by_size[size] = {}
+        by_size[size][variant] = r
+    
+    # Check if we have multiple variants to compare
+    has_comparison = any(len(variants) > 1 for variants in by_size.values())
+    if not has_comparison:
+        return
+    
+    print("\n--- Training Variant Comparison (Qwen) ---")
+    for size in sorted(by_size.keys()):
+        variants = by_size[size]
+        if len(variants) < 2:
+            continue
+        
+        print(f"\n  Model: Qwen {size}")
+        print(f"  {'Variant':<20} {'Accuracy':<12} {'Kappa':<12} {'Train Time':<15} {'Inference (ms)'}")
+        print(f"  {'-'*20} {'-'*12} {'-'*12} {'-'*15} {'-'*15}")
+        
+        for variant in ["completion_only", "full_finetune"]:
+            if variant not in variants:
+                continue
+            r = variants[variant]
+            acc = r.get("accuracy", 0)
+            kap = r.get("kappa", 0)
+            train_t = r.get("train_time_sec")
+            train_s = f"{train_t:.1f}s" if train_t is not None else "N/A"
+            inf = r.get("inference_time_per_sample_ms")
+            inf_s = f"{inf:.2f}" if inf is not None else "N/A"
+            print(f"  {variant:<20} {acc:<12.4f} {kap:<12.4f} {train_s:<15} {inf_s}")
+        
+        # Show delta if both variants exist
+        if "completion_only" in variants and "full_finetune" in variants:
+            co = variants["completion_only"]
+            ff = variants["full_finetune"]
+            acc_delta = (co.get("accuracy", 0) - ff.get("accuracy", 0)) * 100
+            kap_delta = (co.get("kappa", 0) - ff.get("kappa", 0))
+            
+            delta_sign = "+" if acc_delta >= 0 else ""
+            print(f"  {'Delta (CO - FF)':<20} {delta_sign}{acc_delta:.2f}%{'pts':<7} {kap_delta:+.4f}")
+            
+            if abs(acc_delta) < 0.5:
+                print("  → Variants perform similarly, completion_only recommended (faster training)")
+            elif acc_delta > 0:
+                print("  → Completion-only is better")
+            else:
+                print("  → Full-finetune is better")
 
 
 if __name__ == "__main__":

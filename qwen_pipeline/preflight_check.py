@@ -63,8 +63,8 @@ def run_checks(config=None, model_size: str = "4B", skip_model: bool = False) ->
             _check(n_classes >= 2, f"Both classes present for stratification: {counts.to_dict()}")
             if n_classes < 2:
                 all_ok = False
-            _check(cfg.train_ratio + cfg.val_ratio + cfg.test_ratio == 1.0,
-                   f"Split ratios sum to 1: {cfg.train_ratio}+{cfg.val_ratio}+{cfg.test_ratio}")
+            _check(cfg.train_ratio + cfg.test_ratio == 1.0,
+                   f"Split ratios sum to 1: {cfg.train_ratio}+{cfg.test_ratio}")
 
     # 3. Config sanity
     print("\n3. Config validity")
@@ -81,6 +81,8 @@ def run_checks(config=None, model_size: str = "4B", skip_model: bool = False) ->
     _check(cfg.max_seq_length > 0, f"max_seq_length > 0 ({cfg.max_seq_length})")
     _check(cfg.lora_rank > 0, f"lora_rank > 0 ({cfg.lora_rank})")
     _check(0 < cfg.conf_score_sft <= 1, f"conf_score_sft in (0, 1]: {cfg.conf_score_sft}")
+    valid_variants = ["completion_only", "full_finetune"]
+    _check(cfg.training_variant in valid_variants, f"training_variant in {valid_variants}: {cfg.training_variant}")
 
     # 4. Model size valid
     print("\n4. Model")
@@ -98,7 +100,7 @@ def run_checks(config=None, model_size: str = "4B", skip_model: bool = False) ->
             splits = get_all_splits(cfg)
             train_df, val_df, test_df = splits["train_df"], splits["val_df"], splits["test_df"]
             _check(len(train_df) > 0, f"Train split: {len(train_df)} rows")
-            _check(len(val_df) > 0, f"Val split: {len(val_df)} rows")
+            _check(len(test_df) > 0, f"Test split: {len(test_df)} rows (used for validation)")
             _check(len(test_df) > 0, f"Test split: {len(test_df)} rows")
 
             sft_train = splits["sft_train"]
@@ -108,6 +110,9 @@ def run_checks(config=None, model_size: str = "4B", skip_model: bool = False) ->
 
             sample = sft_train[0]
             _check("prompt" in sample and "completion" in sample, "SFT example has prompt and completion")
+            _check("chat_template_kwargs" in sample, "SFT example has chat_template_kwargs")
+            _check(sample.get("chat_template_kwargs", {}).get("enable_thinking") is False, 
+                   "SFT chat_template_kwargs has enable_thinking=False")
         except Exception as e:
             _check(False, f"Split/dataset build: {e}")
             all_ok = False

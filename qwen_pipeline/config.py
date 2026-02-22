@@ -33,9 +33,8 @@ def _default_column_mapping():
 class Config:
     data_path: str = "data/on_off_topic_combined.xlsx"
     column_mapping: dict = field(default_factory=_default_column_mapping)
-    train_ratio: float = 0.7
-    val_ratio: float = 0.15
-    test_ratio: float = 0.15
+    train_ratio: float = 0.8
+    test_ratio: float = 0.2
     random_state: int = 42
     llm_model: str = "Qwen/Qwen3-4B"
     lora_rank: int = 32
@@ -50,6 +49,7 @@ class Config:
     sft_early_stopping_patience: int = 2
     max_seq_length: int = 4096
     conf_score_sft: float = 0.95
+    training_variant: str = "completion_only"  # "completion_only" or "full_finetune"
     system_prompt: str = field(default_factory=lambda: SYSTEM_PROMPT)
 
     # GRPO (after SFT)
@@ -68,3 +68,11 @@ class Config:
     grpo_save_steps: int = 500
     grpo_save_total_limit: int = 10
     grpo_gpu_memory_utilization: float = 0.8
+
+    def __post_init__(self):
+        """Validate configuration values."""
+        valid_variants = ["completion_only", "full_finetune"]
+        if self.training_variant not in valid_variants:
+            raise ValueError(
+                f"training_variant must be one of {valid_variants}, got: {self.training_variant}"
+            )

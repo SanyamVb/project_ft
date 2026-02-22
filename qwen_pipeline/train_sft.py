@@ -1,5 +1,6 @@
 # needs to be at the top for patching
 from unsloth import FastLanguageModel
+from unsloth.chat_templates import train_on_responses_only
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -69,21 +70,33 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
     model, tokenizer = init_model_for_sft(config)
     
     def formatting_func(examples):
-        """Format messages field for Unsloth SFTTrainer."""
+        """Format prompt + completion for Unsloth SFTTrainer with enable_thinking=False."""
         # Handle both single example (dict) and batched examples
-        if isinstance(examples["messages"][0], dict):
-            # Single example: examples["messages"] is a list of message dicts
+        if isinstance(examples["prompt"][0], dict):
+            # Single example: examples["prompt"] is a list of message dicts
+            messages = examples["prompt"] + examples["completion"]
+            chat_template_kwargs = examples.get("chat_template_kwargs", {"enable_thinking": False})
             return [tokenizer.apply_chat_template(
-                examples["messages"], 
+                messages, 
                 tokenize=False, 
-                add_generation_prompt=False
+                add_generation_prompt=False,
+                **chat_template_kwargs
             )]
         else:
-            # Batched examples: examples["messages"] is a list of conversations
-            return [
-                tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
-                for messages in examples["messages"]
-            ]
+            # Batched examples: examples["prompt"] is a list of conversations
+            results = []
+            for i in range(len(examples["prompt"])):
+                messages = examples["prompt"][i] + examples["completion"][i]
+                chat_template_kwargs = examples.get("chat_template_kwargs", [{"enable_thinking": False}] * len(examples["prompt"]))[i]
+                results.append(
+                    tokenizer.apply_chat_template(
+                        messages, 
+                        tokenize=False, 
+                        add_generation_prompt=False,
+                        **chat_template_kwargs
+                    )
+                )
+            return results
 
     sft_config = SFTConfig(
         output_dir=config.sft_output_dir,
@@ -95,24 +108,32 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
         max_grad_norm=config.sft_max_grad_norm,
         optim=config.sft_optim,
         lr_scheduler_type=config.sft_lr_scheduler_type,
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        load_best_model_at_end=True,
-        metric_for_best_model="eval_loss",
-        greater_is_better=False,
+        save_strategy="steps",
+        save_steps=500,
+        save_total_limit=10,
         report_to="none",
-        logging_steps=10,
+        logging_steps=1,
         weight_decay=0.01,
         warmup_ratio=0.1,
         packing=False,
+        
+        # For optional training + evaluation
+        # eval_strategy="epoch",
+        # load_best_model_at_end=True,
+        # metric_for_best_model="eval_loss",
+        # greater_is_better=False,
+        # fp16_full_eval = True,
+        # per_device_eval_batch_size = 4,
+        # eval_accumulation_steps = 1,
     )
 
-    callbacks = [
-        EarlyStoppingCallback(
-            early_stopping_patience=config.sft_early_stopping_patience,
-            early_stopping_threshold=0.0,
-        ),
-    ]
+    # Early stopping requires evaluation to be enabled
+    # callbacks = [
+    #     EarlyStoppingCallback(
+    #         early_stopping_patience=config.sft_early_stopping_patience,
+    #         early_stopping_threshold=0.0,
+    #     ),
+    # ]
 
     trainer = SFTTrainer(
         model=model,
@@ -121,8 +142,20 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
         eval_dataset=sft_val,
         formatting_func=formatting_func,
         tokenizer=tokenizer,
-        callbacks=callbacks,
+        # callbacks=callbacks,
     )
+    
+    # Apply Unsloth's completion-only training if selected
+    if config.training_variant == "completion_only":
+        print("Using completion-only training (masking prompt tokens with Unsloth)")
+        # Wrap trainer to only train on assistant responses (after <|im_start|>assistant)
+        trainer = train_on_responses_only(
+            trainer,
+            instruction_part="<|im_start|>user\n",
+            response_part="<|im_start|>assistant\n",
+        )
+    else:
+        print("Using full-finetune training (training on entire sequence)")
 
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)
     trainer.save_model(config.sft_output_dir)

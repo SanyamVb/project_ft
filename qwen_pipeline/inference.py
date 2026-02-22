@@ -72,14 +72,18 @@ def _messages_for_row(row: pd.Series, config: Config) -> List[dict]:
     ]
 
 
-def predict_single(model, tokenizer, messages: List[dict], max_new_tokens: int = 128) -> str:
-    """Run inference for a single prompt."""
+def predict_single(model, tokenizer, messages: List[dict], max_new_tokens: int = 128):
+    """Run inference for a single prompt. Returns (generated_text, inference_time_sec)."""
+    import time
     prompt = tokenizer.apply_chat_template(
         messages,
         tokenize=False,
         add_generation_prompt=True,
     )
     inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+    
+    # Time only the model generation
+    t0 = time.perf_counter()
     with torch.no_grad():
         outputs = model.generate(
             **inputs,
@@ -88,8 +92,10 @@ def predict_single(model, tokenizer, messages: List[dict], max_new_tokens: int =
             do_sample=True,
             temperature=0.3,
         )
+    inference_time = time.perf_counter() - t0
+    
     generated = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True)
-    return generated
+    return generated, inference_time
 
 
 def predict_batch(
@@ -98,12 +104,16 @@ def predict_batch(
     tokenizer,
     config: Config,
     max_new_tokens: int = 128,
-) -> List[dict]:
-    """Run inference on each row. Returns list of {topic_flag, conf_score, raw}."""
+):
+    """Run inference on each row. Returns (results, total_inference_time_sec)."""
     results = []
+    total_inference_time = 0.0
+    
     for _, row in df.iterrows():
         messages = _messages_for_row(row, config)
-        raw = predict_single(model, tokenizer, messages, max_new_tokens)
+        raw, inference_time = predict_single(model, tokenizer, messages, max_new_tokens)
+        total_inference_time += inference_time
+        
         topic_flag = parse_answer(raw)
         conf_score = 0.5
         try:
@@ -117,4 +127,4 @@ def predict_batch(
             "conf_score": conf_score,
             "raw": raw,
         })
-    return results
+    return results, total_inference_time

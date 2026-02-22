@@ -55,6 +55,8 @@ pip install unsloth trl transformers datasets peft pandas openpyxl scikit-learn 
 - Machine Transciption / Machine Transcription
 - Human_Combined (topic_flag: 0/1, Yes/No)
 
+Data is automatically split **80/20** (train/test). The test set is used for both validation during training and final evaluation.
+
 **DeBERTa pipeline** uses separate train/test Excel files:
 
 - `data/train_1000_0822_balanced.xlsx`, `data/test_331_0822_balanced.xlsx`
@@ -115,6 +117,47 @@ python -m qwen_pipeline.run_pipeline --mode train_only --run_grpo --model_size 4
 ```
 
 Requires `vllm`. GRPO checkpoints save to `outputs_grpo_{model_size}/`.
+
+---
+
+## Training Variant Comparison (Qwen)
+
+Compare **completion-only** (trains only on assistant responses) vs **full-finetune** (trains on entire conversation) to determine which approach works better for your dataset.
+
+### Run both variants
+
+```bash
+# Train with completion-only (default, masks prompt tokens)
+python -m qwen_pipeline.run_pipeline --mode full --model_size 4B --training_variant completion_only
+
+# Train with full-finetune (trains on entire sequence)
+python -m qwen_pipeline.run_pipeline --mode full --model_size 4B --training_variant full_finetune
+```
+
+Output directories will be variant-specific:
+- `outputs_sft_4B_completion_only/`
+- `outputs_sft_4B_full_finetune/`
+
+### Compare results
+
+```bash
+python benchmark_report.py
+```
+
+The report shows:
+- **Side-by-side comparison table** with accuracy, kappa, and training time for each variant
+- **Delta metrics** (completion-only vs full-finetune)
+- **Recommendation** based on performance differences
+
+### Interpreting results
+
+- **Similar accuracy (<0.5% difference)**: Use completion-only (faster training, more focused learning)
+- **Completion-only wins**: Better generalization by not overfitting to prompt patterns
+- **Full-finetune wins**: Dataset benefits from learning the full conversation structure
+
+**Typical expectations:**
+- Completion-only: Faster convergence, better format compliance, less overfitting
+- Full-finetune: May learn prompt patterns, potentially higher training loss initially
 
 ---
 
