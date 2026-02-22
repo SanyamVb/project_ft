@@ -16,7 +16,7 @@ def init_model_for_sft(config: Config):
     """Load Unsloth model with LoRA for SFT (no vLLM)."""
     base_model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=config.llm_model,
-        max_seq_length=config.max_seq_length,
+        # max_seq_length=config.max_seq_length,
         load_in_4bit=False,
         fast_inference=False,  # No vLLM for SFT
         max_lora_rank=config.lora_rank,
@@ -104,7 +104,6 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
         per_device_train_batch_size=config.sft_batch_size,
         gradient_accumulation_steps=config.sft_grad_accum,
         learning_rate=config.sft_lr,
-        max_seq_length=config.max_seq_length,
         max_grad_norm=config.sft_max_grad_norm,
         optim=config.sft_optim,
         lr_scheduler_type=config.sft_lr_scheduler_type,
