@@ -49,6 +49,8 @@ def __load_unsloth_model(path: str, config: Config):
             attn_implementation="eager",
         )
         tokenizer = AutoTokenizer.from_pretrained(path)
+        # Set max_seq_length attribute for consistency (may be needed by inference code)
+        model.max_seq_length = config.max_seq_length
         return model, tokenizer
 
     from unsloth import FastLanguageModel
