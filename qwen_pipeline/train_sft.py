@@ -117,8 +117,10 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
         warmup_ratio=0.1,
         packing=False,
         
-        # Set to False when using formatting_func + train_on_responses_only
+        # Explicitly disable completion_only_loss since we use train_on_responses_only wrapper
         dataset_text_field=None,
+        dataset_kwargs={"skip_prepare_dataset": False},
+        completion_only_loss=False,
         
         # For optional training + evaluation
         # eval_strategy="epoch",
