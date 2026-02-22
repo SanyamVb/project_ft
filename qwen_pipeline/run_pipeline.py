@@ -80,6 +80,7 @@ def main():
             run_sft_train(splits["sft_train"], splits["sft_val"], config)
             train_time_sec = time.perf_counter() - t0
             checkpoint = config.sft_output_dir
+            print(config.max_seq_length)
             model, tokenizer = load_trained_model(config, checkpoint)
             predictions, inference_time_total = predict_batch(splits["test_df"], model, tokenizer, config)
             n = len(splits["test_df"])

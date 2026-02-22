@@ -113,7 +113,7 @@ def main():
     # Initialize config
     config = Config()
     config.llm_model = QWEN_MODEL_OPTIONS["4B"]
-    
+    print(f"Using max_seq_length: {config.max_seq_length}")
     if args.data_path:
         config.data_path = args.data_path
     
