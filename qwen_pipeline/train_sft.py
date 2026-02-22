@@ -117,6 +117,9 @@ def run_sft_train(sft_train: Dataset, sft_val: Dataset, config: Config, resume_f
         warmup_ratio=0.1,
         packing=False,
         
+        # Set to False when using formatting_func + train_on_responses_only
+        dataset_text_field=None,
+        
         # For optional training + evaluation
         # eval_strategy="epoch",
         # load_best_model_at_end=True,
