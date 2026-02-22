@@ -59,6 +59,8 @@ def __load_unsloth_model(path: str, config: Config):
         load_in_4bit=False,
         dtype=None,
     )
+    # Set max_seq_length attribute explicitly for Unsloth's fast inference
+    model.max_seq_length = config.max_seq_length
     # Enable inference mode properly
     FastLanguageModel.for_inference(model)
     return model, tokenizer
