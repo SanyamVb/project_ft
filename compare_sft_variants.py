@@ -58,7 +58,7 @@ def run_single_experiment(config: Config, training_variant: str, epochs: int, sp
     print("\n--- Results ---")
     print(f"Accuracy: {metrics['accuracy']:.4f}")
     print(f"Kappa: {metrics['kappa']:.4f}")
-    print(f"Score: {metrics['score']:.0f} (mean: {metrics['mean_score']:.2f})")
+    print(f"Score: {metrics['total_score']:.0f} (mean: {metrics['mean_score']:.2f}")
     
     # Save metrics
     params_M = _get_params_M(model)
@@ -73,7 +73,7 @@ def run_single_experiment(config: Config, training_variant: str, epochs: int, sp
         "inference_time_per_sample_ms": round(inference_time_per_sample_ms, 2),
         "accuracy": metrics["accuracy"],
         "kappa": metrics["kappa"],
-        "score": metrics["score"],
+        "score": metrics["total_score"],
         "mean_score": metrics["mean_score"],
         "best_threshold": 0.5,
         "checkpoint_path": config.sft_output_dir,
