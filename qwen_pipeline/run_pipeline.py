@@ -96,7 +96,7 @@ def main():
                 "inference_time_per_sample_ms": round(inference_time_per_sample_ms, 2),
                 "accuracy": metrics["accuracy"],
                 "kappa": metrics["kappa"],
-                "score": metrics["score"],
+                "score": metrics["total_score"],
                 "mean_score": metrics["mean_score"],
                 "best_threshold": 0.5,
                 "checkpoint_path": config.sft_output_dir,
@@ -176,7 +176,7 @@ def main():
         print("\n--- Test Set Metrics ---")
         print(f"Accuracy: {metrics['accuracy']:.4f}")
         print(f"Kappa: {metrics['kappa']:.4f}")
-        print(f"Score (2 correct, -1 wrong): total={metrics['score']:.0f} mean={metrics['mean_score']:.2f}")
+        print(f"Score (2 correct, -1 wrong): total={metrics['total_score']:.0f} mean={metrics['mean_score']:.2f}")
         print(metrics["classification_report"])
         print("Confusion matrix:")
         print(metrics["confusion_matrix"])
@@ -188,7 +188,7 @@ def main():
             json.dump({
                 "accuracy": metrics["accuracy"],
                 "kappa": metrics["kappa"],
-                "score": metrics["score"],
+                "score": metrics["total_score"],
                 "mean_score": metrics["mean_score"],
                 "confusion_matrix": metrics["confusion_matrix"].tolist(),
             }, f, indent=2)
@@ -204,7 +204,7 @@ def main():
             "inference_time_per_sample_ms": round(inference_time_per_sample_ms, 2),
             "accuracy": metrics["accuracy"],
             "kappa": metrics["kappa"],
-            "score": metrics["score"],
+            "score": metrics["total_score"],
             "mean_score": metrics["mean_score"],
             "best_threshold": 0.5,
             "checkpoint_path": output_dir,
