@@ -35,36 +35,21 @@ def load_trained_model(config: Config, checkpoint_path: Optional[str] = None):
 
 
 def __load_unsloth_model(path: str, config: Config):
-    """Load saved SFT model. Uses PEFT when path contains adapter, else Unsloth."""
-    import os
-    from transformers import AutoTokenizer
+    """Load saved SFT model via Unsloth.
 
-    adapter_config = os.path.join(path, "adapter_config.json")
-    if os.path.exists(adapter_config):
-        from peft import AutoPeftModelForCausalLM
-
-        model = AutoPeftModelForCausalLM.from_pretrained(
-            path,
-            device_map="auto",
-            attn_implementation="eager",
-            # max_position_embeddings = config.max_position_embeddings
-        )
-        tokenizer = AutoTokenizer.from_pretrained(path)
-        # Set max_seq_length attribute for consistency (may be needed by inference code)
-        # model.
-        return model, tokenizer
-
+    Always uses FastLanguageModel.from_pretrained so that Unsloth's forward-method
+    patches are applied and model.max_seq_length is properly set.  Unsloth handles
+    both merged checkpoints and LoRA adapter directories (adapter_config.json)
+    transparently — no need to branch on PEFT vs non-PEFT here.
+    """
     from unsloth import FastLanguageModel
 
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=path,
-        max_position_embeddings=config.max_position_embeddings,
+        max_seq_length=config.max_position_embeddings,  # must use max_seq_length, not max_position_embeddings
         load_in_4bit=False,
         dtype=None,
     )
-    # Set max_seq_length attribute explicitly for Unsloth's fast inference
-    # model.max_seq_length = config.max_position_embeddings
-    # Enable inference mode properly
     FastLanguageModel.for_inference(model)
     return model, tokenizer
 
