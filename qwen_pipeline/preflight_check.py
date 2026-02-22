@@ -78,7 +78,7 @@ def run_checks(config=None, model_size: str = "4B", skip_model: bool = False) ->
     _check(cfg.sft_lr > 0, f"sft_lr > 0 ({cfg.sft_lr})")
     _check(cfg.sft_max_grad_norm > 0, f"sft_max_grad_norm > 0 ({cfg.sft_max_grad_norm})")
     _check(cfg.sft_early_stopping_patience >= 1, f"sft_early_stopping_patience >= 1 ({cfg.sft_early_stopping_patience})")
-    _check(cfg.max_seq_length > 0, f"max_seq_length > 0 ({cfg.max_seq_length})")
+    _check(cfg.max_position_embeddings > 0, f"max_position_embeddings > 0 ({cfg.max_position_embeddings})")
     _check(cfg.lora_rank > 0, f"lora_rank > 0 ({cfg.lora_rank})")
     _check(0 < cfg.conf_score_sft <= 1, f"conf_score_sft in (0, 1]: {cfg.conf_score_sft}")
     valid_variants = ["completion_only", "full_finetune"]

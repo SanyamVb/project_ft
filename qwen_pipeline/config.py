@@ -47,7 +47,7 @@ class Config:
     sft_optim: str = "adamw_torch"
     sft_lr_scheduler_type: str = "cosine"
     sft_early_stopping_patience: int = 2
-    max_seq_length: int = 4096
+    max_position_embeddings: int = 4096
     conf_score_sft: float = 0.95
     training_variant: str = "completion_only"  # "completion_only" or "full_finetune"
     system_prompt: str = field(default_factory=lambda: SYSTEM_PROMPT)

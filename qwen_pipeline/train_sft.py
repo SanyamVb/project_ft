@@ -16,7 +16,7 @@ def init_model_for_sft(config: Config):
     """Load Unsloth model with LoRA for SFT (no vLLM)."""
     base_model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=config.llm_model,
-        max_seq_length=config.max_seq_length,
+        max_seq_length=config.max_position_embeddings,
         load_in_4bit=False,
         fast_inference=False,  # No vLLM for SFT
         max_lora_rank=config.lora_rank,

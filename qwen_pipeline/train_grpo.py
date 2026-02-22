@@ -91,7 +91,7 @@ def load_model_for_grpo(config: Config, checkpoint_path: str):
     """Load SFT checkpoint for GRPO with vLLM (fast_inference=True)."""
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=checkpoint_path,
-        max_seq_length=config.max_seq_length,
+        max_seq_length=config.max_position_embeddings,
         load_in_4bit=False,
         fast_inference=True,
         max_lora_rank=config.lora_rank,
@@ -128,7 +128,7 @@ def run_grpo_train(grpo_train: Dataset, config: Config, sft_checkpoint_path: str
         per_device_train_batch_size=config.grpo_batch_size,
         gradient_accumulation_steps=config.grpo_grad_accum,
         num_generations=config.grpo_num_generations,
-        max_prompt_length=config.max_seq_length - config.grpo_max_completion_length,
+        max_prompt_length=config.max_position_embeddings - config.grpo_max_completion_length,
         max_completion_length=config.grpo_max_completion_length,
         num_train_epochs=config.grpo_epochs,
         save_steps=config.grpo_save_steps,

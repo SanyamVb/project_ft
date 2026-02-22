@@ -169,7 +169,7 @@ Normal SFT 3 Epochs           3        0.8801      0.7602          1.54         
 Edit `qwen_pipeline/config.py` to adjust:
 - Learning rate (`sft_lr`)
 - Batch size (`sft_batch_size`)
-- Max sequence length (`max_seq_length`)
+- Max sequence length (`max_position_embeddings`)
 - LoRA rank (`lora_rank`)
 
 ### Add More Epoch Variations

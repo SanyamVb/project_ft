@@ -321,7 +321,7 @@ Grid search tests all combinations but is slower than Optuna's Bayesian optimiza
 
 ## Config
 
-**Qwen** (`qwen_pipeline/config.py`): `data_path`, `llm_model`, `sft_epochs`, `sft_batch_size`, `max_seq_length`, `sft_max_grad_norm`, `sft_optim`, `sft_lr_scheduler_type`, `sft_early_stopping_patience`.
+**Qwen** (`qwen_pipeline/config.py`): `data_path`, `llm_model`, `sft_epochs`, `sft_batch_size`, `max_position_embeddings`, `sft_max_grad_norm`, `sft_optim`, `sft_lr_scheduler_type`, `sft_early_stopping_patience`.
 
 **DeBERTa** (`deberta_pipeline/config.py`): `TRAIN_PATH`, `TEST_PATH`, `MODEL_OPTIONS`, `NUM_EPOCHS`, `BATCH_SIZE`, `MAX_GRAD_NORM`, `GRADIENT_ACCUMULATION_STEPS`, `OPTIM`, `LR_SCHEDULER_TYPE`, `EARLY_STOPPING_PATIENCE`, `LABEL_SMOOTHING`.
 
