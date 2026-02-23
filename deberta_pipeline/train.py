@@ -93,6 +93,11 @@ def run_train(
     model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
     params_M = round(sum(p.numel() for p in model.parameters()) / 1e6, 1)
     print(f"Parameters: {params_M}M")
+    
+    # Enable gradient checkpointing for large model to save memory
+    if model_size == "large":
+        print("Enabling gradient checkpointing for large model...")
+        model.gradient_checkpointing_enable()
 
     # Use model-size-specific batch size if available
     batch_size = BATCH_SIZE_PER_MODEL.get(model_size, BATCH_SIZE)
@@ -121,6 +126,7 @@ def run_train(
         logging_steps=10,
         report_to="none",
         fp16=torch.cuda.is_available(),
+        gradient_checkpointing=True if model_size == "large" else False,
     )
 
     callbacks = [

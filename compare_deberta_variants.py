@@ -5,12 +5,24 @@ import json
 import time
 import argparse
 from datetime import datetime
+import torch
+import gc
 
 from deberta_pipeline.config import MODEL_OPTIONS, TRAIN_PATH, TEST_PATH
 from deberta_pipeline.data_loader import load_data, get_datasets
 from deberta_pipeline.train import run_train
 from deberta_pipeline.inference import load_model, predict_batch
 from deberta_pipeline.eval_utils import threshold_sweep
+
+
+def show_gpu_memory():
+    """Display current GPU memory usage."""
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / 1e9
+        reserved = torch.cuda.memory_reserved() / 1e9
+        print(f"GPU Memory - Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")
+    else:
+        print("No GPU available")
 
 
 def run_single_experiment(
@@ -26,6 +38,9 @@ def run_single_experiment(
     print(f"EXPERIMENT: {experiment_name}")
     print(f"Model Size: {model_size} | Epochs: {epochs}")
     print(f"{'='*80}\n")
+    
+    # Show initial GPU memory
+    show_gpu_memory()
     
     # Set output directory
     output_dir = f"outputs_deberta_{model_size}_epoch{epochs}"
@@ -115,11 +130,22 @@ def run_single_experiment(
     
     print(f"Metrics saved to {output_dir}/benchmark_metrics.json")
     
-    # Clean up model to free memory
+    # Clean up model to free GPU memory
+    print("\nCleaning up GPU memory...")
+    # Move model to CPU before deletion to ensure GPU memory is released
+    if torch.cuda.is_available():
+        model.cpu()
     del model, tokenizer
-    import torch
+    
+    # Aggressive GPU memory cleanup
+    gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+    
+    # Show final GPU memory state
+    show_gpu_memory()
+    print("GPU memory cleanup completed.")
     
     return benchmark_result
 
