@@ -8,7 +8,7 @@ Human_Combined/topic_flag column is already 0/1.
 import pandas as pd
 from datasets import Dataset
 
-from .config import TRAIN_PATH, TEST_PATH, MAX_LENGTH
+from .config import TRAIN_PATH, TEST_PATH, MAX_LENGTH, SYSTEM_PROMPT
 
 
 def load_data(train_path: str = TRAIN_PATH, test_path: str = TEST_PATH):
@@ -54,7 +54,7 @@ def build_cross_encoder_inputs(examples, tokenizer):
     """Build tokenized inputs for cross-encoder using Qwen-style prompt.
 
     Mirrors qwen_pipeline.dataset_utils._user_prompt so that the text seen
-    by DeBERTa matches the Qwen SFT/GRPO setup.
+    by DeBERTa matches the Qwen SFT/GRPO setup, including the system prompt.
     """
     prompts = []
     for topic, sub_topic, script, transcription, level in zip(
@@ -64,7 +64,9 @@ def build_cross_encoder_inputs(examples, tokenizer):
         examples["transcription"],
         examples["prompt_level"],
     ):
-        prompt = f"""
+        # Include the system prompt to match Qwen's approach
+        prompt = f"""{SYSTEM_PROMPT}
+
 You are now given the below data:
 Prompt Topic: {topic}
 Prompt Sub-Topic: {sub_topic}
