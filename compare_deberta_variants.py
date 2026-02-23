@@ -8,6 +8,9 @@ from datetime import datetime
 import torch
 import gc
 
+# Set environment variable to reduce CUDA memory fragmentation
+os.environ['PYTORCH_CUDA_ALLOC_CONF'] = 'max_split_size_mb:512'
+
 from deberta_pipeline.config import MODEL_OPTIONS, TRAIN_PATH, TEST_PATH
 from deberta_pipeline.data_loader import load_data, get_datasets
 from deberta_pipeline.train import run_train
@@ -20,9 +23,31 @@ def show_gpu_memory():
     if torch.cuda.is_available():
         allocated = torch.cuda.memory_allocated() / 1e9
         reserved = torch.cuda.memory_reserved() / 1e9
-        print(f"GPU Memory - Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")
+        total = torch.cuda.get_device_properties(0).total_memory / 1e9
+        free = total - allocated
+        print(f"GPU Memory - Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB, Free: {free:.2f} GB / {total:.2f} GB")
     else:
         print("No GPU available")
+
+
+def aggressive_gpu_cleanup():
+    """Perform aggressive GPU memory cleanup."""
+    print("Performing aggressive GPU cleanup...")
+    
+    # Multiple rounds of cleanup
+    for i in range(3):
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            # Also try to reset peak memory stats
+            torch.cuda.reset_peak_memory_stats()
+            torch.cuda.reset_accumulated_memory_stats()
+    
+    # Small delay to ensure cleanup completes
+    time.sleep(0.5)
+    
+    show_gpu_memory()
 
 
 def run_single_experiment(
@@ -45,10 +70,12 @@ def run_single_experiment(
     # Force memory cleanup before loading large models
     if model_size == "large":
         print("Preparing for large model - forcing memory cleanup...")
+        aggressive_gpu_cleanup()
+    elif model_size == "base":
+        print("Preparing for base model - quick memory cleanup...")
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
-            torch.cuda.synchronize()
         show_gpu_memory()
     
     # Set output directory
@@ -90,6 +117,12 @@ def run_single_experiment(
         finally:
             # Restore original config
             deberta_config.NUM_EPOCHS = original_epochs
+        
+        # Extra cleanup after training before loading model for inference
+        print("\nCleaning up after training before inference...")
+        if 'benchmark' in locals():
+            del benchmark  # Delete benchmark dict that might hold references
+        aggressive_gpu_cleanup()
         
         # Load trained model for inference
         model, tokenizer = load_model(output_dir)
@@ -154,15 +187,11 @@ def run_single_experiment(
     if torch.cuda.is_available():
         model.cpu()
     del model, tokenizer
+    del test_hf  # Also delete the dataset
     
     # Aggressive GPU memory cleanup
-    gc.collect()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
+    aggressive_gpu_cleanup()
     
-    # Show final GPU memory state
-    show_gpu_memory()
     print("GPU memory cleanup completed.")
     
     return benchmark_result
@@ -232,6 +261,11 @@ def main():
     # Run all experiments
     all_results = []
     start_time_overall = time.perf_counter()
+    
+    # Start with clean GPU state
+    print("\nInitial GPU cleanup before experiments...")
+    aggressive_gpu_cleanup()
+    print("")
     
     for i, (model_size, epochs, name) in enumerate(experiments, 1):
         print(f"\n\n{'#'*80}")

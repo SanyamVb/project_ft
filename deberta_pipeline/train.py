@@ -206,6 +206,20 @@ def run_train(
 
     print(f"Model saved to {output_dir}")
     print(f"Benchmark: acc={accuracy:.4f} kappa={kappa:.4f} train={train_time_sec:.0f}s inf={inference_time_ms:.1f}ms/sample")
+    
+    # Clean up trainer and model to free GPU memory
+    print("Cleaning up training resources...")
+    del trainer
+    if torch.cuda.is_available():
+        model.cpu()
+    del model
+    del train_hf, test_hf
+    import gc
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    print("Training cleanup completed.")
+    
     return benchmark
 
 
