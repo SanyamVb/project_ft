@@ -1,5 +1,6 @@
 """DeBERTa cross-encoder training."""
 
+import gc
 import json
 import os
 import time
@@ -91,16 +92,8 @@ def run_train(
     train_hf, test_hf = get_datasets(train_df, test_df, tokenizer)
 
     print(f"Loading model: {model_name}")
-    # Load in fp16 for large model to save memory
-    if model_size == "large" and torch.cuda.is_available():
-        print("Loading large model in fp16 mode to save memory...")
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_name, 
-            num_labels=2,
-            torch_dtype=torch.float16,
-        )
-    else:
-        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    # Don't manually load in FP16 - let Trainer handle FP16 conversion to avoid gradient scaler conflicts
+    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
     
     params_M = round(sum(p.numel() for p in model.parameters()) / 1e6, 1)
     print(f"Parameters: {params_M}M")

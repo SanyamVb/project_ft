@@ -28,7 +28,7 @@ BATCH_SIZE_PER_MODEL = {
     "xsmall": 32,
     "small": 32,
     "base": 16,
-    "large": 4,  # Significantly reduced for memory efficiency
+    "large": 1,  # Ultra-conservative for 304M param model
 }
 
 # Evaluation batch sizes (can be larger than training)
