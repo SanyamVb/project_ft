@@ -23,6 +23,7 @@ from .config import (
     BATCH_SIZE,
     BATCH_SIZE_PER_MODEL,
     EVAL_BATCH_SIZE,
+    EVAL_BATCH_SIZE_PER_MODEL,
     LEARNING_RATE,
     OUTPUT_PREFIX,
     WEIGHT_DECAY,
@@ -90,7 +91,17 @@ def run_train(
     train_hf, test_hf = get_datasets(train_df, test_df, tokenizer)
 
     print(f"Loading model: {model_name}")
-    model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    # Load in fp16 for large model to save memory
+    if model_size == "large" and torch.cuda.is_available():
+        print("Loading large model in fp16 mode to save memory...")
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_name, 
+            num_labels=2,
+            torch_dtype=torch.float16,
+        )
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(model_name, num_labels=2)
+    
     params_M = round(sum(p.numel() for p in model.parameters()) / 1e6, 1)
     print(f"Parameters: {params_M}M")
     
@@ -101,17 +112,23 @@ def run_train(
 
     # Use model-size-specific batch size if available
     batch_size = BATCH_SIZE_PER_MODEL.get(model_size, BATCH_SIZE)
+    eval_batch_size = EVAL_BATCH_SIZE_PER_MODEL.get(model_size, EVAL_BATCH_SIZE)
     # Adjust gradient accumulation to maintain effective batch size
-    grad_accum = max(1, (BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS) // batch_size)
+    # For large model with smaller batch size, increase gradient accumulation
+    if model_size == "large":
+        grad_accum = max(4, (BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS) // batch_size)
+    else:
+        grad_accum = max(1, (BATCH_SIZE * GRADIENT_ACCUMULATION_STEPS) // batch_size)
     
-    print(f"Training config: batch_size={batch_size}, grad_accum={grad_accum} (effective_batch={batch_size * grad_accum})")
+    print(f"Training config: batch_size={batch_size}, eval_batch_size={eval_batch_size}, "
+          f"grad_accum={grad_accum} (effective_batch={batch_size * grad_accum})")
 
     training_args = TrainingArguments(
         output_dir=output_dir,
         num_train_epochs=NUM_EPOCHS,
         per_device_train_batch_size=batch_size,
         gradient_accumulation_steps=grad_accum,
-        per_device_eval_batch_size=EVAL_BATCH_SIZE,
+        per_device_eval_batch_size=eval_batch_size,
         learning_rate=LEARNING_RATE,
         weight_decay=WEIGHT_DECAY,
         warmup_ratio=WARMUP_RATIO,

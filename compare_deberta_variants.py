@@ -42,6 +42,15 @@ def run_single_experiment(
     # Show initial GPU memory
     show_gpu_memory()
     
+    # Force memory cleanup before loading large models
+    if model_size == "large":
+        print("Preparing for large model - forcing memory cleanup...")
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+        show_gpu_memory()
+    
     # Set output directory
     output_dir = f"outputs_deberta_{model_size}_epoch{epochs}"
     
@@ -72,6 +81,12 @@ def run_single_experiment(
             train_time_sec = time.perf_counter() - t0
             params_M = benchmark["params_M"]
             print(f"Training completed in {train_time_sec:.2f} seconds")
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower():
+                print(f"\n*** GPU Out of Memory Error for {model_size} model ***")
+                print("Try reducing batch size further or using gradient accumulation.")
+                print(f"Current config: batch_size={deberta_config.BATCH_SIZE_PER_MODEL.get(model_size, 8)}")
+            raise
         finally:
             # Restore original config
             deberta_config.NUM_EPOCHS = original_epochs
@@ -83,8 +98,11 @@ def run_single_experiment(
     print("\nRunning inference on test set...")
     _, test_hf = get_datasets(train_df, test_df, tokenizer)
     
+    # Use smaller batch size for large model during inference
+    inference_batch_size = 8 if model_size == "large" else 32
+    
     t0 = time.perf_counter()
-    off_topic_probs = predict_batch(model, tokenizer, test_hf)
+    off_topic_probs = predict_batch(model, tokenizer, test_hf, batch_size=inference_batch_size)
     inference_time_total = time.perf_counter() - t0
     n = len(test_df)
     inference_time_per_sample_ms = (inference_time_total / n) * 1000 if n > 0 else 0

@@ -28,7 +28,15 @@ BATCH_SIZE_PER_MODEL = {
     "xsmall": 32,
     "small": 32,
     "base": 16,
-    "large": 8,  # Reduced for memory efficiency
+    "large": 4,  # Significantly reduced for memory efficiency
+}
+
+# Evaluation batch sizes (can be larger than training)
+EVAL_BATCH_SIZE_PER_MODEL = {
+    "xsmall": 64,
+    "small": 64,
+    "base": 32,
+    "large": 8,  # Reduced for large model
 }
 LEARNING_RATE = 2.77701682113078e-05  # Best from hyperparameter tuning: Trial #7, Kappa=0.8303, Acc=0.9152
 OUTPUT_PREFIX = "models/deberta_cross_encoder"

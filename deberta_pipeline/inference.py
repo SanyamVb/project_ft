@@ -22,13 +22,21 @@ def load_model(checkpoint_path: str):
     return model, tokenizer
 
 
-def predict_batch(model, tokenizer, test_hf, device=None):
-    """Run inference and return logits / off-topic probs."""
+def predict_batch(model, tokenizer, test_hf, device=None, batch_size=32):
+    """Run inference and return logits / off-topic probs.
+    
+    Args:
+        model: The model to use for prediction
+        tokenizer: The tokenizer
+        test_hf: The test dataset
+        device: The device to use (default: model's device)
+        batch_size: Batch size for inference (default: 32, reduce for large models)
+    """
     if device is None:
         device = next(model.parameters()).device
     from transformers import DataCollatorWithPadding
     collator = DataCollatorWithPadding(tokenizer)
-    dl = torch.utils.data.DataLoader(test_hf, batch_size=32, collate_fn=collator)
+    dl = torch.utils.data.DataLoader(test_hf, batch_size=batch_size, collate_fn=collator)
     logits_list = []
     with torch.no_grad():
         for batch in dl:
