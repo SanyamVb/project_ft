@@ -186,8 +186,8 @@ for num_epochs in [1, 2, 3]:
         greater_is_better=True,
         logging_steps=10,
         report_to="none",
-        fp16=True if device.type == "cuda" else False,  # Use fp16 instead of bf16 for stability
-        bf16=False,
+        fp16=False,  # Disabled - causes gradient scaling errors
+        bf16=True if device.type == "cuda" else False,  # Use bf16 for better stability
         gradient_checkpointing=False,  # Not needed with LoRA, can cause issues
         optim="adamw_torch",
     )
