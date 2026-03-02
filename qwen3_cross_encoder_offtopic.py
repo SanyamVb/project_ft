@@ -10,6 +10,7 @@ from transformers import (
     Trainer,
     DataCollatorWithPadding,
 )
+from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score
 import matplotlib.pyplot as plt
@@ -152,6 +153,19 @@ for num_epochs in [1, 2, 3]:
         num_labels=2,
         torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
     )
+    
+    # Apply LoRA for parameter-efficient fine-tuning
+    print("\nApplying LoRA configuration...")
+    lora_config = LoraConfig(
+        r=32,  # LoRA rank (same as qwen_pipeline)
+        lora_alpha=32,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # All attention projection layers
+        lora_dropout=0.1,
+        bias="none",
+        task_type=TaskType.SEQ_CLS,  # Sequence classification task
+    )
+    model = get_peft_model(model, lora_config)
+    model.print_trainable_parameters()  # Shows trainable vs total parameters
     
     # Training arguments with adjustments for Qwen3-4B and 4096 max_length
     training_args = TrainingArguments(
