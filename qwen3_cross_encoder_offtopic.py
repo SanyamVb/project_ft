@@ -40,9 +40,9 @@ print(f"PyTorch version: {torch.__version__}")
 train_df = pd.read_excel("data/train_0216.xlsx")
 test_df = pd.read_excel("data/test_0216.xlsx")
 
-label_map = {"No": 0, "Yes": 1}
-train_df["label"] = train_df["Final_Annotation"].map(label_map)
-test_df["label"] = test_df["Final_Annotation"].map(label_map)
+label_map = {0: 0, 1: 1}  # Human_Combined is already 0/1
+train_df["label"] = train_df["Human_Combined"]
+test_df["label"] = test_df["Human_Combined"]
 
 print(f"Train: {len(train_df)} rows — {train_df['label'].value_counts().to_dict()}")
 print(f"Test:  {len(test_df)} rows — {test_df['label'].value_counts().to_dict()}")
@@ -193,16 +193,9 @@ for num_epochs in [1, 2, 3]:
         "train_loss": train_result.metrics.get("train_loss"),
         "epoch": train_result.metrics.get("epoch"),
     }
-    print(f"\n=== Starting Training ({num_epochs} epoch(s)) ===")
-    train_result = trainer.train()
     
-    # Store training metrics
-    training_metrics = {
-        "train_runtime": train_result.metrics.get("train_runtime"),
-        "train_samples_per_second": train_result.metrics.get("train_samples_per_second"),
-        "train_loss": train_result.metrics.get("train_loss"),
-        "epoch": train_result.metrics.get("epoch"),
-    }
+    print(f"\nTraining completed in {training_metrics['train_runtime']:.2f} seconds")
+    print(f"Train loss: {training_metrics['train_loss']:.4f}")
 
     # Evaluation
     print(f"\n=== Evaluating on Test Set ({num_epochs} epoch(s)) ===")

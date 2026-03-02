@@ -50,9 +50,9 @@ train_df_full = pd.read_excel("data/train_0216.xlsx")
 test_df_full = pd.read_excel("data/test_0216.xlsx")
 
 # Take 2 samples: 1 on-topic, 1 off-topic if possible
-label_map = {"No": 0, "Yes": 1}
-train_df_full["label"] = train_df_full["Final_Annotation"].map(label_map)
-test_df_full["label"] = test_df_full["Final_Annotation"].map(label_map)
+label_map = {0: 0, 1: 1}  # Human_Combined is already 0/1
+train_df_full["label"] = train_df_full["Human_Combined"]
+test_df_full["label"] = test_df_full["Human_Combined"]
 
 # Try to get balanced samples
 train_on = train_df_full[train_df_full["label"] == 0].head(1)
