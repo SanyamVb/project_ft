@@ -167,16 +167,17 @@ for num_epochs in [1, 2, 3]:
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()  # Shows trainable vs total parameters
     
-    # Training arguments with adjustments for Qwen3-4B and 4096 max_length
+    # Training arguments optimized for LoRA + sequence classification
     training_args = TrainingArguments(
         output_dir=f"./qwen3_cross_encoder_output/{num_epochs}_epoch",
         num_train_epochs=num_epochs,
-        per_device_train_batch_size=1,  # Reduced for 4B model + 4096 tokens
-        gradient_accumulation_steps=16,   # Increased to maintain effective batch size of 16
-        per_device_eval_batch_size=1,    # Reduced for 4B model + 4096 tokens
-        learning_rate=2e-5,
+        per_device_train_batch_size=4,  # Increased thanks to LoRA memory savings
+        gradient_accumulation_steps=4,   # Maintain effective batch size of 16
+        per_device_eval_batch_size=8,    # Increased for faster evaluation
+        learning_rate=5e-5,  # Higher LR for LoRA (typical range: 1e-4 to 5e-4)
         weight_decay=0.01,
         warmup_ratio=0.1,
+        max_grad_norm=0.3,  # Gradient clipping to prevent NaN
         lr_scheduler_type="cosine",
         eval_strategy="epoch",
         save_strategy="epoch",
@@ -185,10 +186,10 @@ for num_epochs in [1, 2, 3]:
         greater_is_better=True,
         logging_steps=10,
         report_to="none",
-        fp16=False,
-        bf16=True if device.type == "cuda" else False,
-        gradient_checkpointing=True,  # Save memory
-        optim="adamw_torch",  # Fix for FP16 gradient unscaling error
+        fp16=True if device.type == "cuda" else False,  # Use fp16 instead of bf16 for stability
+        bf16=False,
+        gradient_checkpointing=False,  # Not needed with LoRA, can cause issues
+        optim="adamw_torch",
     )
     
     # Create data collator
