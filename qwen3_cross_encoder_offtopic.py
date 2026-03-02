@@ -159,7 +159,7 @@ for num_epochs in [1, 2, 3]:
         num_train_epochs=num_epochs,
         per_device_train_batch_size=1,  # Reduced for 4B model + 4096 tokens
         gradient_accumulation_steps=16,   # Increased to maintain effective batch size of 16
-        per_device_eval_batch_size=2,    # Reduced for 4B model + 4096 tokens
+        per_device_eval_batch_size=1,    # Reduced for 4B model + 4096 tokens
         learning_rate=2e-5,
         weight_decay=0.01,
         warmup_ratio=0.1,
