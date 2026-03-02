@@ -115,11 +115,11 @@ print(f"\nLoading {MODEL_NAME} for sequence classification...")
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=2,
-    torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
+    torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
 )
 
 # Configure padding token for the model
-# model.config.pad_token_id = tokenizer.pad_token_id
+model.config.pad_token_id = tokenizer.pad_token_id
 
 total_params = sum(p.numel() for p in model.parameters())
 trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -151,8 +151,9 @@ for num_epochs in [1, 2, 3]:
     model = AutoModelForSequenceClassification.from_pretrained(
         MODEL_NAME,
         num_labels=2,
-        torch_dtype=torch.float16 if device.type == "cuda" else torch.float32,
+        torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
     )
+    model.config.pad_token_id = tokenizer.pad_token_id
     
     # Apply LoRA for parameter-efficient fine-tuning
     print("\nApplying LoRA configuration...")
