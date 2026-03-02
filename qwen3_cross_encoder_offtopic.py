@@ -165,8 +165,8 @@ for num_epochs in [1, 2, 3]:
         greater_is_better=True,
         logging_steps=10,
         report_to="none",
-        fp16=True if device.type == "cuda" else False,
-        bf16=False,
+        fp16=False,
+        bf16=True if device.type == "cuda" else False,
         gradient_checkpointing=True,  # Save memory
         optim="adamw_torch",  # Fix for FP16 gradient unscaling error
     )

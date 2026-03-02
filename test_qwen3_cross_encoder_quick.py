@@ -174,8 +174,8 @@ for num_epochs in [1]:  # Only 1 epoch for quick test
         greater_is_better=True,
         logging_steps=1,
         report_to="none",
-        fp16=True if device.type == "cuda" else False,
-        bf16=False,
+        fp16=False,
+        bf16=True if device.type == "cuda" else False,
         gradient_checkpointing=False,  # Disabled for small model
         optim="adamw_torch",  # Fix for FP16 gradient unscaling error
     )
