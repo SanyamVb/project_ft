@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import torch
 import os
+import time
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -18,7 +19,9 @@ warnings.filterwarnings('ignore')
 
 # Using Qwen3 instead of DeBERTa
 # Available models: "Qwen/Qwen3-0.6B", "Qwen/Qwen3-4B", "Qwen/Qwen3-8B"
-MODEL_NAME = "Qwen/Qwen3-4B"
+# Set MODEL_SIZE to either "0.6B" or "4B"
+MODEL_SIZE = "4B"  # Change this to "0.6B" or "4B"
+MODEL_NAME = f"Qwen/Qwen3-{MODEL_SIZE}"
 MAX_LENGTH = 4096
 
 # System prompt from qwen_pipeline
@@ -35,6 +38,9 @@ if device.type == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
     print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 print(f"PyTorch version: {torch.__version__}")
+print(f"\n{'='*80}")
+print(f"RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
+print(f"{'='*80}\n")
 
 # Load data
 train_df = pd.read_excel("data/train_0216.xlsx")
@@ -198,9 +204,22 @@ for num_epochs in [1, 2, 3]:
     print(f"\nTraining completed in {training_metrics['train_runtime']:.2f} seconds")
     print(f"Train loss: {training_metrics['train_loss']:.4f}")
 
-    # Evaluation
+    # Evaluation with timing
     print(f"\n=== Evaluating on Test Set ({num_epochs} epoch(s)) ===")
+    
+    # Time the inference
+    inference_start = time.time()
     preds_output = trainer.predict(test_hf)
+    inference_end = time.time()
+    
+    inference_time = inference_end - inference_start
+    num_samples = len(test_hf)
+    avg_inference_time_per_sample = inference_time / num_samples
+    
+    print(f"Total inference time: {inference_time:.2f} seconds")
+    print(f"Number of samples: {num_samples}")
+    print(f"Average inference time per sample: {avg_inference_time_per_sample*1000:.2f} ms")
+    
     logits = preds_output.predictions
     y_true = test_df["label"].values
 
@@ -259,7 +278,14 @@ for num_epochs in [1, 2, 3]:
     # Store all metrics for this epoch configuration
     all_epoch_results[f"{num_epochs}_epoch"] = {
         "num_epochs": num_epochs,
+        "model_name": MODEL_NAME,
+        "model_size": MODEL_SIZE,
         "training_metrics": training_metrics,
+        "inference_metrics": {
+            "total_inference_time": float(inference_time),
+            "num_samples": num_samples,
+            "avg_inference_time_per_sample_ms": float(avg_inference_time_per_sample * 1000),
+        },
         "default_threshold_metrics": {
             "threshold": 0.5,
             "accuracy": float(acc_default),
@@ -300,6 +326,8 @@ comparison_df = pd.DataFrame([
         "Epochs": result["num_epochs"],
         "Train Loss": result["training_metrics"]["train_loss"],
         "Train Time (s)": result["training_metrics"]["train_runtime"],
+        "Inf Time (s)": result["inference_metrics"]["total_inference_time"],
+        "Avg Inf/Sample (ms)": result["inference_metrics"]["avg_inference_time_per_sample_ms"],
         "Default Acc": result["default_threshold_metrics"]["accuracy"],
         "Default Kappa": result["default_threshold_metrics"]["kappa"],
         "Best Threshold": result["optimized_threshold_metrics"]["threshold"],
@@ -322,7 +350,7 @@ print("Comparison saved to models/qwen3_cross_encoder_offtopic/epoch_comparison.
 print("All results saved to models/qwen3_cross_encoder_offtopic/all_epoch_results.json")
 
 # Generate comparison visualizations
-fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 
 # Plot 1: Kappa vs Epochs
 ax1 = axes[0, 0]
@@ -363,6 +391,24 @@ ax4.set_ylabel("Training Time (seconds)")
 ax4.set_title("Training Time vs Epochs")
 ax4.grid(True, alpha=0.3)
 ax4.set_xticks([1, 2, 3])
+
+# Plot 5: Average Inference Time per Sample vs Epochs
+ax5 = axes[1, 2]
+ax5.plot(comparison_df["Epochs"], comparison_df["Avg Inf/Sample (ms)"], 'o-', color='green', linewidth=2, markersize=8)
+ax5.set_xlabel("Number of Epochs")
+ax5.set_ylabel("Avg Inference Time per Sample (ms)")
+ax5.set_title("Inference Time per Sample vs Epochs")
+ax5.grid(True, alpha=0.3)
+ax5.set_xticks([1, 2, 3])
+
+# Plot 6: Total Inference Time vs Epochs
+ax6 = axes[0, 2]
+ax6.plot(comparison_df["Epochs"], comparison_df["Inf Time (s)"], 'o-', color='teal', linewidth=2, markersize=8)
+ax6.set_xlabel("Number of Epochs")
+ax6.set_ylabel("Total Inference Time (seconds)")
+ax6.set_title("Total Inference Time vs Epochs")
+ax6.grid(True, alpha=0.3)
+ax6.set_xticks([1, 2, 3])
 
 plt.tight_layout()
 plt.savefig("models/qwen3_cross_encoder_offtopic/epoch_comparison.png", dpi=300)
