@@ -171,9 +171,9 @@ for num_epochs in [1, 2, 3]:
     training_args = TrainingArguments(
         output_dir=f"./qwen3_cross_encoder_output/{num_epochs}_epoch",
         num_train_epochs=num_epochs,
-        per_device_train_batch_size=4,  # Increased thanks to LoRA memory savings
-        gradient_accumulation_steps=4,   # Maintain effective batch size of 16
-        per_device_eval_batch_size=8,    # Increased for faster evaluation
+        per_device_train_batch_size=2,  # Moderate batch size for LoRA
+        gradient_accumulation_steps=8,   # Maintain effective batch size of 16
+        per_device_eval_batch_size=4,    # Moderate eval batch size
         learning_rate=5e-5,  # Higher LR for LoRA (typical range: 1e-4 to 5e-4)
         weight_decay=0.01,
         warmup_ratio=0.1,
