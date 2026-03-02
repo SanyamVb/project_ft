@@ -177,6 +177,7 @@ for num_epochs in [1]:  # Only 1 epoch for quick test
         fp16=True if device.type == "cuda" else False,
         bf16=False,
         gradient_checkpointing=False,  # Disabled for small model
+        optim="adamw_torch",  # Fix for FP16 gradient unscaling error
     )
     
     # Create data collator

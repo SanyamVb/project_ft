@@ -168,6 +168,7 @@ for num_epochs in [1, 2, 3]:
         fp16=True if device.type == "cuda" else False,
         bf16=False,
         gradient_checkpointing=True,  # Save memory
+        optim="adamw_torch",  # Fix for FP16 gradient unscaling error
     )
     
     # Create data collator
