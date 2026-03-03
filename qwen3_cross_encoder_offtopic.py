@@ -140,7 +140,7 @@ os.makedirs("models/qwen3_cross_encoder_offtopic", exist_ok=True)
 all_epoch_results = {}
 
 # Loop through different epoch configurations
-for num_epochs in [1, 2, 3]:
+for num_epochs in [4, 5, 6, 7]:
     print(f"\n{'='*80}")
     print(f"{'='*80}")
     print(f"TRAINING WITH {num_epochs} EPOCH(S)")
@@ -377,7 +377,7 @@ ax1.set_ylabel("Cohen's Kappa")
 ax1.set_title("Kappa Score vs Training Epochs")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
-ax1.set_xticks([1, 2, 3])
+ax1.set_xticks([1, 2, 3, 4])
 
 # Plot 2: Accuracy vs Epochs
 ax2 = axes[0, 1]
@@ -388,7 +388,7 @@ ax2.set_ylabel("Accuracy")
 ax2.set_title("Accuracy vs Training Epochs")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
-ax2.set_xticks([1, 2, 3])
+ax2.set_xticks([1, 2, 3, 4])
 
 # Plot 3: Training Loss vs Epochs
 ax3 = axes[1, 0]
@@ -397,7 +397,7 @@ ax3.set_xlabel("Number of Epochs")
 ax3.set_ylabel("Training Loss")
 ax3.set_title("Training Loss vs Epochs")
 ax3.grid(True, alpha=0.3)
-ax3.set_xticks([1, 2, 3])
+ax3.set_xticks([1, 2, 3, 4])
 
 # Plot 4: Training Time vs Epochs
 ax4 = axes[1, 1]
@@ -406,7 +406,7 @@ ax4.set_xlabel("Number of Epochs")
 ax4.set_ylabel("Training Time (seconds)")
 ax4.set_title("Training Time vs Epochs")
 ax4.grid(True, alpha=0.3)
-ax4.set_xticks([1, 2, 3])
+ax4.set_xticks([1, 2, 3, 4])
 
 # Plot 5: Average Inference Time per Sample vs Epochs
 ax5 = axes[1, 2]
@@ -415,7 +415,7 @@ ax5.set_xlabel("Number of Epochs")
 ax5.set_ylabel("Avg Inference Time per Sample (ms)")
 ax5.set_title("Inference Time per Sample vs Epochs")
 ax5.grid(True, alpha=0.3)
-ax5.set_xticks([1, 2, 3])
+ax5.set_xticks([1, 2, 3, 4])
 
 # Plot 6: Total Inference Time vs Epochs
 ax6 = axes[0, 2]
@@ -424,7 +424,7 @@ ax6.set_xlabel("Number of Epochs")
 ax6.set_ylabel("Total Inference Time (seconds)")
 ax6.set_title("Total Inference Time vs Epochs")
 ax6.grid(True, alpha=0.3)
-ax6.set_xticks([1, 2, 3])
+ax6.set_xticks([1, 2, 3, 4])
 
 plt.tight_layout()
 plt.savefig("models/qwen3_cross_encoder_offtopic/epoch_comparison.png", dpi=300)
