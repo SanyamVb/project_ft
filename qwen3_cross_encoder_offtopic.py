@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import os
 import time
+import random
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
@@ -199,21 +200,26 @@ model = AutoModelForSequenceClassification.from_pretrained(
 )
 # model.config.pad_token_id = tokenizer.pad_token_id
 
+# Set random seed for reproducibility
+SEED = 3407
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed_all(SEED)
+
 # Apply LoRA for parameter-efficient fine-tuning
 print("\nApplying LoRA configuration...")
 lora_config = LoraConfig(
     r=64,  # Reduced LoRA rank for memory efficiency
     lora_alpha=128,
-    # target_modules=["q_proj", "v_proj"],  # Reduced target modules for memory
-    lora_dropout=0.1,  # Add dropout for regularization
-    bias="none",
-    task_type=TaskType.SEQ_CLS,  # Sequence classification task
-    target_modules = [
+    target_modules=[
         "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj",
     ],
-    # lora_alpha = lora_rank*2,
-    random_state = 3407,
+    lora_dropout=0.1,  # Add dropout for regularization
+    bias="none",
+    task_type=TaskType.SEQ_CLS,  # Sequence classification task
 )
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
