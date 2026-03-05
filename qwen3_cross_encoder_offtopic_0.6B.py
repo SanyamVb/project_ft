@@ -18,12 +18,13 @@ import json
 import warnings
 warnings.filterwarnings('ignore')
 
-# Using Qwen3 instead of DeBERTa
-# Available models: "Qwen/Qwen3-0.6B", "Qwen/Qwen3-4B", "Qwen/Qwen3-8B"
-# Set MODEL_SIZE to either "0.6B" or "4B"
-MODEL_SIZE = "4B"  # Change this to "0.6B" or "4B"
+# Qwen3-0.6B configuration
+MODEL_SIZE = "0.6B"
 MODEL_NAME = f"Qwen/Qwen3-{MODEL_SIZE}"
 MAX_LENGTH = 4096
+
+# Separate output folder for 0.6B results
+OUTPUT_DIR = "models/qwen3_cross_encoder_offtopic_0.6B"
 
 # System prompt from qwen_pipeline
 SYSTEM_PROMPT = """You are an expert at detecting whether the test-taker's response is strictly associated to the given prompt topic, prompt sub-topic and prompt script or not. Being off topic refers to the test-taker's response being either totally or atleast majorly unrelated to the prompt topic, prompt sub-topic and prompt script given to the test-taker. The test-taker is in a setting, where to pass, they have to genuinely provide a response based on the prompt topic, prompt sub-topic and prompt script given to them.
@@ -37,7 +38,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 if device.type == "cuda":
     print(f"GPU: {torch.cuda.get_device_name(0)}")
-    print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
+    print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_mem / 1e9:.1f} GB")
 print(f"PyTorch version: {torch.__version__}")
 print(f"\n{'='*80}")
 print(f"RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
@@ -134,13 +135,13 @@ def compute_metrics(eval_pred):
     return {"accuracy": float(acc), "kappa": float(kappa)}
 
 # Create output directory
-os.makedirs("models/qwen3_cross_encoder_offtopic", exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Store results for all epoch configurations
 all_epoch_results = {}
 
-# Loop through different epoch configurations
-for num_epochs in [7, 8, 9, 10]:
+# Loop through epochs 1-6
+for num_epochs in [1, 2, 3, 4, 5, 6]:
     print(f"\n{'='*80}")
     print(f"{'='*80}")
     print(f"TRAINING WITH {num_epochs} EPOCH(S)")
@@ -170,7 +171,7 @@ for num_epochs in [7, 8, 9, 10]:
     
     # Training arguments optimized for LoRA + sequence classification
     training_args = TrainingArguments(
-        output_dir=f"./qwen3_cross_encoder_output/{num_epochs}_epoch",
+        output_dir=f"./qwen3_cross_encoder_output_0.6B/{num_epochs}_epoch",
         num_train_epochs=num_epochs,
         per_device_train_batch_size=1,  # Minimum batch size for memory constraints
         gradient_accumulation_steps=16,   # Maintain effective batch size of 16
@@ -287,7 +288,7 @@ for num_epochs in [7, 8, 9, 10]:
     print(f"  Accuracy: {acc_default:.4f} -> {best['accuracy']:.4f} ({best['accuracy'] - acc_default:+.4f})")
 
     # Save model
-    save_path = f"models/qwen3_cross_encoder_offtopic/{num_epochs}_epoch"
+    save_path = f"{OUTPUT_DIR}/{num_epochs}_epoch"
     trainer.save_model(save_path)
     tokenizer.save_pretrained(save_path)
     
@@ -321,6 +322,7 @@ for num_epochs in [7, 8, 9, 10]:
     }
     
     # Save individual epoch metrics
+    os.makedirs(save_path, exist_ok=True)
     with open(f"{save_path}/metrics.json", "w") as f:
         json.dump(all_epoch_results[f"{num_epochs}_epoch"], f, indent=2)
     
@@ -334,7 +336,7 @@ for num_epochs in [7, 8, 9, 10]:
 
 # Save comparison of all epoch results
 print(f"\n{'='*80}")
-print("SUMMARY: Comparison Across All Epochs")
+print("SUMMARY: Comparison Across All Epochs (Qwen3-0.6B)")
 print(f"{'='*80}\n")
 
 comparison_df = pd.DataFrame([
@@ -358,15 +360,16 @@ print(comparison_df.to_string(index=False))
 print()
 
 # Save comparison
-comparison_df.to_csv("models/qwen3_cross_encoder_offtopic/epoch_comparison.csv", index=False)
-with open("models/qwen3_cross_encoder_offtopic/all_epoch_results.json", "w") as f:
+comparison_df.to_csv(f"{OUTPUT_DIR}/epoch_comparison.csv", index=False)
+with open(f"{OUTPUT_DIR}/all_epoch_results.json", "w") as f:
     json.dump(all_epoch_results, f, indent=2)
 
-print("Comparison saved to models/qwen3_cross_encoder_offtopic/epoch_comparison.csv")
-print("All results saved to models/qwen3_cross_encoder_offtopic/all_epoch_results.json")
+print(f"Comparison saved to {OUTPUT_DIR}/epoch_comparison.csv")
+print(f"All results saved to {OUTPUT_DIR}/all_epoch_results.json")
 
 # Generate comparison visualizations
 fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+fig.suptitle("Qwen3-0.6B Cross-Encoder Results (Epochs 1-6)", fontsize=14, fontweight='bold')
 
 # Plot 1: Kappa vs Epochs
 ax1 = axes[0, 0]
@@ -377,7 +380,7 @@ ax1.set_ylabel("Cohen's Kappa")
 ax1.set_title("Kappa Score vs Training Epochs")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
-ax1.set_xticks([7, 8, 9, 10])
+ax1.set_xticks([1, 2, 3, 4, 5, 6])
 
 # Plot 2: Accuracy vs Epochs
 ax2 = axes[0, 1]
@@ -388,7 +391,7 @@ ax2.set_ylabel("Accuracy")
 ax2.set_title("Accuracy vs Training Epochs")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
-ax2.set_xticks([7, 8, 9, 10])
+ax2.set_xticks([1, 2, 3, 4, 5, 6])
 
 # Plot 3: Training Loss vs Epochs
 ax3 = axes[1, 0]
@@ -397,7 +400,7 @@ ax3.set_xlabel("Number of Epochs")
 ax3.set_ylabel("Training Loss")
 ax3.set_title("Training Loss vs Epochs")
 ax3.grid(True, alpha=0.3)
-ax3.set_xticks([7, 8, 9, 10])
+ax3.set_xticks([1, 2, 3, 4, 5, 6])
 
 # Plot 4: Training Time vs Epochs
 ax4 = axes[1, 1]
@@ -406,7 +409,7 @@ ax4.set_xlabel("Number of Epochs")
 ax4.set_ylabel("Training Time (seconds)")
 ax4.set_title("Training Time vs Epochs")
 ax4.grid(True, alpha=0.3)
-ax4.set_xticks([7, 8, 9, 10])
+ax4.set_xticks([1, 2, 3, 4, 5, 6])
 
 # Plot 5: Average Inference Time per Sample vs Epochs
 ax5 = axes[1, 2]
@@ -415,7 +418,7 @@ ax5.set_xlabel("Number of Epochs")
 ax5.set_ylabel("Avg Inference Time per Sample (ms)")
 ax5.set_title("Inference Time per Sample vs Epochs")
 ax5.grid(True, alpha=0.3)
-ax5.set_xticks([7, 8, 9, 10])
+ax5.set_xticks([1, 2, 3, 4, 5, 6])
 
 # Plot 6: Total Inference Time vs Epochs
 ax6 = axes[0, 2]
@@ -424,13 +427,13 @@ ax6.set_xlabel("Number of Epochs")
 ax6.set_ylabel("Total Inference Time (seconds)")
 ax6.set_title("Total Inference Time vs Epochs")
 ax6.grid(True, alpha=0.3)
-ax6.set_xticks([7, 8, 9, 10])
+ax6.set_xticks([1, 2, 3, 4, 5, 6])
 
 plt.tight_layout()
-plt.savefig("models/qwen3_cross_encoder_offtopic/epoch_comparison.png", dpi=300)
-print("\nComparison plot saved to models/qwen3_cross_encoder_offtopic/epoch_comparison.png")
+plt.savefig(f"{OUTPUT_DIR}/epoch_comparison.png", dpi=300)
+print(f"\nComparison plot saved to {OUTPUT_DIR}/epoch_comparison.png")
 plt.show()
 
 print("\n" + "="*80)
-print("ALL EXPERIMENTS COMPLETED!")
+print("ALL EXPERIMENTS COMPLETED (Qwen3-0.6B, Epochs 1-6)!")
 print("="*80)
