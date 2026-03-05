@@ -205,7 +205,7 @@ lora_config = LoraConfig(
     r=64,  # Reduced LoRA rank for memory efficiency
     lora_alpha=128,
     # target_modules=["q_proj", "v_proj"],  # Reduced target modules for memory
-    lora_dropout=0,
+    lora_dropout=0.1,  # Add dropout for regularization
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
     target_modules = [
@@ -228,28 +228,28 @@ if device.type == "cuda":
 training_args = TrainingArguments(
     output_dir="./qwen3_cross_encoder_sft_10epochs_new",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
-    per_device_train_batch_size=1,  # Minimum for memory constraints
-    gradient_accumulation_steps=16,  # Maintain effective batch size of 16
-    per_device_eval_batch_size=1,  # Reduced eval batch size
+    per_device_train_batch_size=2,  # Minimum for memory constraints
+    gradient_accumulation_steps=8,  # Maintain effective batch size of 16
+    per_device_eval_batch_size=2,  # Increased eval batch size for faster evaluation
     learning_rate=2e-5,  # Optimized learning rate
     weight_decay=0.001,
-    warmup_steps=50,
-    lr_scheduler_type="linear",
-    optim="adamw_8bit",
+    warmup_ratio=0.1,  # Use ratio-based warmup (10% of training)
+    lr_scheduler_type="cosine",  # Cosine scheduler for better convergence
+    optim="adamw_torch",  # Full precision optimizer
     # logging_steps=1,
     logging_strategy="epoch",
     save_steps=500,
-    save_total_limit=10,
+    save_total_limit=None,  # Keep ALL epoch checkpoints for individual testing
     report_to="none",  # Can use Weights & Biases
     eval_strategy="epoch",  # Evaluate after each epoch
     save_strategy="epoch",  # Save after each epoch
-    load_best_model_at_end=True,  # Load best model based on evaluation metric
+    load_best_model_at_end=False,  # Don't load best - keep all checkpoints for testing
     metric_for_best_model="kappa",  # Use kappa as the metric for best model
     greater_is_better=True,  # Higher kappa is better
     fp16=False,
     bf16=True,  # Use bfloat16 for stability
-    gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
-    # max_grad_norm=1.0,  # Gradient clipping
+    gradient_checkpointing=False,  # Disable gradient checkpointing
+    max_grad_norm=0.3,  # Gradient clipping to prevent NaN
 )
 
 # Create data collator
@@ -261,6 +261,7 @@ trainer = Trainer(
     args=training_args,
     train_dataset=train_hf,
     eval_dataset=test_hf,
+    processing_class=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
