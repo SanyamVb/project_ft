@@ -216,8 +216,8 @@ model.print_trainable_parameters()  # Shows trainable vs total parameters
 training_args = TrainingArguments(
     output_dir="./qwen3_cross_encoder_sft_10epochs",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
-    per_device_train_batch_size=1,
-    gradient_accumulation_steps=4,  # Increase to 4 for smoother training
+    per_device_train_batch_size=2,
+    gradient_accumulation_steps=2,  # Increase to 4 for smoother training
     learning_rate=2e-5,  # Optimized learning rate
     weight_decay=0.001,
     warmup_steps=50,
