@@ -330,7 +330,7 @@ for current_epoch in range(1, MAX_EPOCHS + 1):
     print(f"  Accuracy: {acc_default:.4f} -> {best['accuracy']:.4f} ({best['accuracy'] - acc_default:+.4f})")
 
     # Save model
-    save_path = f"models/qwen3_cross_encoder_offtopic/epoch_{current_epoch}"
+    save_path = f"models/qwen3_cross_encoder_offtopic_sft/epoch_{current_epoch}"
     trainer.save_model(save_path)
     tokenizer.save_pretrained(save_path)
     
@@ -400,12 +400,12 @@ print(comparison_df.to_string(index=False))
 print()
 
 # Save comparison
-comparison_df.to_csv("models/qwen3_cross_encoder_offtopic/epoch_comparison.csv", index=False)
-with open("models/qwen3_cross_encoder_offtopic/all_epoch_results.json", "w") as f:
+comparison_df.to_csv("models/qwen3_cross_encoder_offtopic_sft/epoch_comparison.csv", index=False)
+with open("models/qwen3_cross_encoder_offtopic_sft/all_epoch_results.json", "w") as f:
     json.dump(all_epoch_results, f, indent=2)
 
-print("Comparison saved to models/qwen3_cross_encoder_offtopic/epoch_comparison.csv")
-print("All results saved to models/qwen3_cross_encoder_offtopic/all_epoch_results.json")
+print("Comparison saved to models/qwen3_cross_encoder_offtopic_sft/epoch_comparison.csv")
+print("All results saved to models/qwen3_cross_encoder_offtopic_sft/all_epoch_results.json")
 
 # Generate comparison visualizations
 fig, axes = plt.subplots(2, 3, figsize=(18, 10))
@@ -463,8 +463,8 @@ ax6.set_title("Total Inference Time vs Epochs")
 ax6.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig("models/qwen3_cross_encoder_offtopic/epoch_comparison.png", dpi=300)
-print("\nComparison plot saved to models/qwen3_cross_encoder_offtopic/epoch_comparison.png")
+plt.savefig("models/qwen3_cross_encoder_offtopic_sft/epoch_comparison.png", dpi=300)
+print("\nComparison plot saved to models/qwen3_cross_encoder_offtopic_sft/epoch_comparison.png")
 plt.show()
 
 print("\n" + "="*80)
