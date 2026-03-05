@@ -62,14 +62,31 @@ if tokenizer.pad_token is None:
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
+# Set Qwen chat template if not present (using ChatML format)
+if tokenizer.chat_template is None:
+    tokenizer.chat_template = (
+        "{% for message in messages %}"
+        "{% if message['role'] == 'system' %}"
+        "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
+        "{% elif message['role'] == 'user' %}"
+        "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
+        "{% elif message['role'] == 'assistant' %}"
+        "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
+        "{% endif %}"
+        "{% endfor %}"
+        "{% if add_generation_prompt %}"
+        "<|im_start|>assistant\n"
+        "{% endif %}"
+    )
+
 def build_cross_encoder_inputs(examples):
     """
-    Build inputs for Qwen3 sequence classification using qwen_pipeline prompt format.
-    Combines SYSTEM_PROMPT + user prompt as text_a, and response as text_b.
+    Build inputs for Qwen3 sequence classification using proper chat template.
+    Formats messages with system + user roles, then applies Qwen's ChatML template.
     """
-    prompts = []
+    formatted_texts = []
     for i in range(len(examples["Prompt Script"])):
-        user_prompt = f"""You are now given the below data:
+        user_content = f"""You are now given the below data:
 Prompt Topic: {examples['Prompt Topic'][i]}
 Prompt Sub-Topic: {examples['Prompt Sub Topic'][i]}
 Prompt Script: {examples['Prompt Script'][i]}
@@ -77,13 +94,25 @@ Test-taker's response: {examples['Machine Transciption'][i]}
 Testing Proficiency Level: {examples['Level'][i]}
 
 Based on your expertise, determine if the test-taker's response is off-topic or not."""
-        # Combine system prompt + user prompt
-        full_prompt = f"{SYSTEM_PROMPT}\n\n{user_prompt}"
-        prompts.append(full_prompt)
+        
+        # Structure as proper chat messages
+        messages = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content}
+        ]
+        
+        # Apply Qwen chat template with enable_thinking=False for classification
+        formatted_text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=False,  # No generation needed for classification
+            enable_thinking=False  # Disable thinking mode for efficiency
+        )
+        formatted_texts.append(formatted_text)
     
-    # Tokenize with truncation and padding
+    # Tokenize the formatted texts
     tokenized = tokenizer(
-        prompts,
+        formatted_texts,
         truncation=True,
         max_length=MAX_LENGTH,
         padding=False,  # Will be handled by DataCollator
@@ -139,89 +168,98 @@ os.makedirs("models/qwen3_cross_encoder_offtopic", exist_ok=True)
 # Store results for all epoch configurations
 all_epoch_results = {}
 
-# Loop through different epoch configurations
-for num_epochs in [7, 8, 9, 10]:
+# Load model once (will train incrementally)
+print(f"\nLoading {MODEL_NAME} for incremental training...")
+model = AutoModelForSequenceClassification.from_pretrained(
+    MODEL_NAME,
+    num_labels=2,
+    torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
+)
+model.config.pad_token_id = tokenizer.pad_token_id
+
+# Apply LoRA for parameter-efficient fine-tuning
+print("\nApplying LoRA configuration...")
+lora_config = LoraConfig(
+    r=32,  # LoRA rank (same as qwen_pipeline)
+    lora_alpha=32,
+    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # All attention projection layers
+    lora_dropout=0.1,
+    bias="none",
+    task_type=TaskType.SEQ_CLS,  # Sequence classification task
+)
+model = get_peft_model(model, lora_config)
+model.print_trainable_parameters()  # Shows trainable vs total parameters
+
+# Training arguments optimized for LoRA + sequence classification
+# Set num_train_epochs=1 to train incrementally
+training_args = TrainingArguments(
+    output_dir="./qwen3_cross_encoder_output",
+    num_train_epochs=1,  # Train 1 epoch at a time
+    per_device_train_batch_size=1,  # Minimum batch size for memory constraints
+    gradient_accumulation_steps=16,   # Maintain effective batch size of 16
+    per_device_eval_batch_size=2,    # Reduced eval batch size
+    learning_rate=5e-5,  # Higher LR for LoRA (typical range: 1e-4 to 5e-4)
+    weight_decay=0.01,
+    warmup_ratio=0.1,
+    max_grad_norm=0.3,  # Gradient clipping to prevent NaN
+    lr_scheduler_type="cosine",
+    eval_strategy="no",  # We'll manually evaluate after each epoch
+    save_strategy="no",  # We'll manually save after each epoch
+    logging_steps=10,
+    report_to="none",
+    fp16=False,  # Disabled - causes gradient scaling errors
+    bf16=True if device.type == "cuda" else False,  # Use bf16 for better stability
+    gradient_checkpointing=False,  # Not needed with LoRA, can cause issues
+    optim="adamw_torch",
+)
+
+# Create data collator
+data_collator = DataCollatorWithPadding(tokenizer, padding=True)
+
+# Create trainer once
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_hf,
+    eval_dataset=test_hf,
+    processing_class=tokenizer,
+    data_collator=data_collator,
+    compute_metrics=compute_metrics,
+)
+
+# Training loop: train for 1 epoch, evaluate, save, repeat
+MAX_EPOCHS = 10
+cumulative_train_time = 0.0
+
+for current_epoch in range(1, MAX_EPOCHS + 1):
     print(f"\n{'='*80}")
     print(f"{'='*80}")
-    print(f"TRAINING WITH {num_epochs} EPOCH(S)")
+    print(f"EPOCH {current_epoch}/{MAX_EPOCHS}")
     print(f"{'='*80}")
     print(f"{'='*80}\n")
     
-    # Reload model for each epoch run (fresh start)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        MODEL_NAME,
-        num_labels=2,
-        torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
-    )
-    model.config.pad_token_id = tokenizer.pad_token_id
-    
-    # Apply LoRA for parameter-efficient fine-tuning
-    print("\nApplying LoRA configuration...")
-    lora_config = LoraConfig(
-        r=32,  # LoRA rank (same as qwen_pipeline)
-        lora_alpha=32,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # All attention projection layers
-        lora_dropout=0.1,
-        bias="none",
-        task_type=TaskType.SEQ_CLS,  # Sequence classification task
-    )
-    model = get_peft_model(model, lora_config)
-    model.print_trainable_parameters()  # Shows trainable vs total parameters
-    
-    # Training arguments optimized for LoRA + sequence classification
-    training_args = TrainingArguments(
-        output_dir=f"./qwen3_cross_encoder_output/{num_epochs}_epoch",
-        num_train_epochs=num_epochs,
-        per_device_train_batch_size=1,  # Minimum batch size for memory constraints
-        gradient_accumulation_steps=16,   # Maintain effective batch size of 16
-        per_device_eval_batch_size=2,    # Reduced eval batch size
-        learning_rate=5e-5,  # Higher LR for LoRA (typical range: 1e-4 to 5e-4)
-        weight_decay=0.01,
-        warmup_ratio=0.1,
-        max_grad_norm=0.3,  # Gradient clipping to prevent NaN
-        lr_scheduler_type="cosine",
-        eval_strategy="epoch",
-        save_strategy="epoch",
-        load_best_model_at_end=True,
-        metric_for_best_model="kappa",
-        greater_is_better=True,
-        logging_steps=10,
-        report_to="none",
-        fp16=False,  # Disabled - causes gradient scaling errors
-        bf16=True if device.type == "cuda" else False,  # Use bf16 for better stability
-        gradient_checkpointing=False,  # Not needed with LoRA, can cause issues
-        optim="adamw_torch",
-    )
-    
-    # Create data collator
-    data_collator = DataCollatorWithPadding(tokenizer, padding=True)
-    
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_hf,
-        eval_dataset=test_hf,
-        processing_class=tokenizer,
-        data_collator=data_collator,
-        compute_metrics=compute_metrics,
-    )
-    
-    print(f"\n=== Starting Training ({num_epochs} epoch(s)) ===")
+    print(f"\n=== Training Epoch {current_epoch} ===")
     train_result = trainer.train()
+    
+    # Accumulate training time
+    epoch_train_time = train_result.metrics.get("train_runtime", 0.0)
+    cumulative_train_time += epoch_train_time
     
     # Store training metrics
     training_metrics = {
-        "train_runtime": train_result.metrics.get("train_runtime"),
+        "train_runtime": epoch_train_time,
+        "cumulative_train_time": cumulative_train_time,
         "train_samples_per_second": train_result.metrics.get("train_samples_per_second"),
         "train_loss": train_result.metrics.get("train_loss"),
-        "epoch": train_result.metrics.get("epoch"),
+        "epoch": current_epoch,
     }
     
-    print(f"\nTraining completed in {training_metrics['train_runtime']:.2f} seconds")
+    print(f"\nEpoch {current_epoch} training completed in {epoch_train_time:.2f} seconds")
+    print(f"Cumulative training time: {cumulative_train_time:.2f} seconds")
     print(f"Train loss: {training_metrics['train_loss']:.4f}")
 
     # Evaluation with timing
-    print(f"\n=== Evaluating on Test Set ({num_epochs} epoch(s)) ===")
+    print(f"\n=== Evaluating on Test Set (Epoch {current_epoch}) ===")
     
     # Time the inference
     inference_start = time.time()
@@ -244,7 +282,7 @@ for num_epochs in [7, 8, 9, 10]:
 
     y_pred_default = (off_topic_probs >= 0.5).astype(int)
 
-    print(f"\n=== Results with Default Threshold (0.5) - {num_epochs} epoch(s) ===")
+    print(f"\n=== Results with Default Threshold (0.5) - Epoch {current_epoch} ===")
     print(classification_report(y_true, y_pred_default, target_names=["On-Topic", "Off-Topic"]))
     print("Confusion Matrix:")
     print(confusion_matrix(y_true, y_pred_default))
@@ -254,7 +292,7 @@ for num_epochs in [7, 8, 9, 10]:
     print(f"Kappa: {kappa_default:.4f}")
 
     # Threshold optimization
-    print(f"\n=== Optimizing Threshold ({num_epochs} epoch(s)) ===")
+    print(f"\n=== Optimizing Threshold (Epoch {current_epoch}) ===")
     thresholds = np.arange(0.10, 0.91, 0.01)
     results = []
 
@@ -275,7 +313,7 @@ for num_epochs in [7, 8, 9, 10]:
     best_idx = results_df["kappa"].idxmax()
     best = results_df.iloc[best_idx]
 
-    print(f"\n=== Optimized Results ({num_epochs} epoch(s)) ===")
+    print(f"\n=== Optimized Results (Epoch {current_epoch}) ===")
     print(f"Best threshold: {best['threshold']:.2f}")
     print(f"  Accuracy:         {best['accuracy']:.4f}")
     print(f"  Kappa:            {best['kappa']:.4f}")
@@ -287,13 +325,13 @@ for num_epochs in [7, 8, 9, 10]:
     print(f"  Accuracy: {acc_default:.4f} -> {best['accuracy']:.4f} ({best['accuracy'] - acc_default:+.4f})")
 
     # Save model
-    save_path = f"models/qwen3_cross_encoder_offtopic/{num_epochs}_epoch"
+    save_path = f"models/qwen3_cross_encoder_offtopic/epoch_{current_epoch}"
     trainer.save_model(save_path)
     tokenizer.save_pretrained(save_path)
     
-    # Store all metrics for this epoch configuration
-    all_epoch_results[f"{num_epochs}_epoch"] = {
-        "num_epochs": num_epochs,
+    # Store all metrics for this epoch
+    all_epoch_results[f"epoch_{current_epoch}"] = {
+        "epoch": current_epoch,
         "model_name": MODEL_NAME,
         "model_size": MODEL_SIZE,
         "training_metrics": training_metrics,
@@ -322,15 +360,13 @@ for num_epochs in [7, 8, 9, 10]:
     
     # Save individual epoch metrics
     with open(f"{save_path}/metrics.json", "w") as f:
-        json.dump(all_epoch_results[f"{num_epochs}_epoch"], f, indent=2)
+        json.dump(all_epoch_results[f"epoch_{current_epoch}"], f, indent=2)
     
     print(f"\nModel and metrics saved to {save_path}")
     
-    # Clear GPU memory between runs
-    if device.type == "cuda":
-        del model, trainer
-        torch.cuda.empty_cache()
-        print("GPU memory cleared")
+    # Update trainer to continue from current state (important!)
+    # Increment num_train_epochs so next train() call trains for 1 more epoch
+    trainer.args.num_train_epochs += 1
 
 # Save comparison of all epoch results
 print(f"\n{'='*80}")
@@ -339,9 +375,10 @@ print(f"{'='*80}\n")
 
 comparison_df = pd.DataFrame([
     {
-        "Epochs": result["num_epochs"],
+        "Epoch": result["epoch"],
         "Train Loss": result["training_metrics"]["train_loss"],
-        "Train Time (s)": result["training_metrics"]["train_runtime"],
+        "Epoch Time (s)": result["training_metrics"]["train_runtime"],
+        "Cumul Time (s)": result["training_metrics"]["cumulative_train_time"],
         "Inf Time (s)": result["inference_metrics"]["total_inference_time"],
         "Avg Inf/Sample (ms)": result["inference_metrics"]["avg_inference_time_per_sample_ms"],
         "Default Acc": result["default_threshold_metrics"]["accuracy"],
@@ -370,61 +407,55 @@ fig, axes = plt.subplots(2, 3, figsize=(18, 10))
 
 # Plot 1: Kappa vs Epochs
 ax1 = axes[0, 0]
-ax1.plot(comparison_df["Epochs"], comparison_df["Default Kappa"], 'o-', label="Default (0.5)", linewidth=2, markersize=8)
-ax1.plot(comparison_df["Epochs"], comparison_df["Best Kappa"], 's-', label="Optimized", linewidth=2, markersize=8)
-ax1.set_xlabel("Number of Epochs")
+ax1.plot(comparison_df["Epoch"], comparison_df["Default Kappa"], 'o-', label="Default (0.5)", linewidth=2, markersize=8)
+ax1.plot(comparison_df["Epoch"], comparison_df["Best Kappa"], 's-', label="Optimized", linewidth=2, markersize=8)
+ax1.set_xlabel("Epoch Number")
 ax1.set_ylabel("Cohen's Kappa")
 ax1.set_title("Kappa Score vs Training Epochs")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
-ax1.set_xticks([7, 8, 9, 10])
 
 # Plot 2: Accuracy vs Epochs
 ax2 = axes[0, 1]
-ax2.plot(comparison_df["Epochs"], comparison_df["Default Acc"], 'o-', label="Default (0.5)", linewidth=2, markersize=8)
-ax2.plot(comparison_df["Epochs"], comparison_df["Best Acc"], 's-', label="Optimized", linewidth=2, markersize=8)
-ax2.set_xlabel("Number of Epochs")
+ax2.plot(comparison_df["Epoch"], comparison_df["Default Acc"], 'o-', label="Default (0.5)", linewidth=2, markersize=8)
+ax2.plot(comparison_df["Epoch"], comparison_df["Best Acc"], 's-', label="Optimized", linewidth=2, markersize=8)
+ax2.set_xlabel("Epoch Number")
 ax2.set_ylabel("Accuracy")
 ax2.set_title("Accuracy vs Training Epochs")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
-ax2.set_xticks([7, 8, 9, 10])
 
 # Plot 3: Training Loss vs Epochs
 ax3 = axes[1, 0]
-ax3.plot(comparison_df["Epochs"], comparison_df["Train Loss"], 'o-', color='purple', linewidth=2, markersize=8)
-ax3.set_xlabel("Number of Epochs")
+ax3.plot(comparison_df["Epoch"], comparison_df["Train Loss"], 'o-', color='purple', linewidth=2, markersize=8)
+ax3.set_xlabel("Epoch Number")
 ax3.set_ylabel("Training Loss")
 ax3.set_title("Training Loss vs Epochs")
 ax3.grid(True, alpha=0.3)
-ax3.set_xticks([7, 8, 9, 10])
 
-# Plot 4: Training Time vs Epochs
+# Plot 4: Cumulative Training Time vs Epochs
 ax4 = axes[1, 1]
-ax4.plot(comparison_df["Epochs"], comparison_df["Train Time (s)"], 'o-', color='orange', linewidth=2, markersize=8)
-ax4.set_xlabel("Number of Epochs")
-ax4.set_ylabel("Training Time (seconds)")
-ax4.set_title("Training Time vs Epochs")
+ax4.plot(comparison_df["Epoch"], comparison_df["Cumul Time (s)"], 'o-', color='orange', linewidth=2, markersize=8)
+ax4.set_xlabel("Epoch Number")
+ax4.set_ylabel("Cumulative Training Time (seconds)")
+ax4.set_title("Cumulative Training Time vs Epochs")
 ax4.grid(True, alpha=0.3)
-ax4.set_xticks([7, 8, 9, 10])
 
 # Plot 5: Average Inference Time per Sample vs Epochs
 ax5 = axes[1, 2]
-ax5.plot(comparison_df["Epochs"], comparison_df["Avg Inf/Sample (ms)"], 'o-', color='green', linewidth=2, markersize=8)
-ax5.set_xlabel("Number of Epochs")
+ax5.plot(comparison_df["Epoch"], comparison_df["Avg Inf/Sample (ms)"], 'o-', color='green', linewidth=2, markersize=8)
+ax5.set_xlabel("Epoch Number")
 ax5.set_ylabel("Avg Inference Time per Sample (ms)")
 ax5.set_title("Inference Time per Sample vs Epochs")
 ax5.grid(True, alpha=0.3)
-ax5.set_xticks([7, 8, 9, 10])
 
 # Plot 6: Total Inference Time vs Epochs
 ax6 = axes[0, 2]
-ax6.plot(comparison_df["Epochs"], comparison_df["Inf Time (s)"], 'o-', color='teal', linewidth=2, markersize=8)
-ax6.set_xlabel("Number of Epochs")
+ax6.plot(comparison_df["Epoch"], comparison_df["Inf Time (s)"], 'o-', color='teal', linewidth=2, markersize=8)
+ax6.set_xlabel("Epoch Number")
 ax6.set_ylabel("Total Inference Time (seconds)")
 ax6.set_title("Total Inference Time vs Epochs")
 ax6.grid(True, alpha=0.3)
-ax6.set_xticks([7, 8, 9, 10])
 
 plt.tight_layout()
 plt.savefig("models/qwen3_cross_encoder_offtopic/epoch_comparison.png", dpi=300)
