@@ -135,6 +135,10 @@ test_hf = test_hf.map(
     remove_columns=["Prompt Topic", "Prompt Sub Topic", "Prompt Script", "Machine Transciption", "Level"]
 )
 
+# Rename 'label' to 'labels' (required by trainer)
+train_hf = train_hf.rename_column("label", "labels")
+test_hf = test_hf.rename_column("label", "labels")
+
 print(f"Train features: {train_hf.features}")
 print(f"Example token count: {len(train_hf[0]['input_ids'])}")
 
@@ -209,7 +213,7 @@ model.print_trainable_parameters()  # Shows trainable vs total parameters
 
 # SFT training arguments optimized for LoRA + sequence classification
 training_args = SFTConfig(
-    output_dir="./qwen3_cross_encoder_output",
+    output_dir="./qwen3_cross_encoder_sft_10epochs",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=4,
     gradient_accumulation_steps=4,  # Increase to 4 for smoother training
@@ -260,7 +264,7 @@ print(f"{'='*80}\n")
 print(f"Total training time: {train_result.metrics.get('train_runtime', 0.0):.2f} seconds")
 
 # Save final model
-final_model_path = "models/qwen3_cross_encoder_offtopic_final"
+final_model_path = "models/qwen3_cross_encoder_sft_10epochs_final"
 trainer.save_model(final_model_path)
 tokenizer.save_pretrained(final_model_path)
 print(f"\nFinal model saved to {final_model_path}")
