@@ -198,9 +198,9 @@ model.print_trainable_parameters()  # Shows trainable vs total parameters
 training_args = SFTConfig(
     output_dir="./qwen3_cross_encoder_output",
     num_train_epochs=1,  # Train 1 epoch at a time
-    per_device_train_batch_size=8,  # Increased for faster training
-    gradient_accumulation_steps=16,  # Effective batch size of 128
-    per_device_eval_batch_size=4,  # Increased eval batch size
+    per_device_train_batch_size=6,  # Balanced for memory safety
+    gradient_accumulation_steps=8,   # Effective batch size of 48
+    per_device_eval_batch_size=3,
     learning_rate=2e-5,
     weight_decay=0.001,
     warmup_steps=50,
