@@ -58,26 +58,26 @@ print(f"Test:  {len(test_df)} rows ΓÇö {test_df['label'].value_counts().to_di
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 # Important: Qwen3 models need a pad token
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.pad_token_id = tokenizer.eos_token_id
+# if tokenizer.pad_token is None:
+#     tokenizer.pad_token = tokenizer.eos_token
+#     tokenizer.pad_token_id = tokenizer.eos_token_id
 
-# Set Qwen chat template if not present (using ChatML format)
-if tokenizer.chat_template is None:
-    tokenizer.chat_template = (
-        "{% for message in messages %}"
-        "{% if message['role'] == 'system' %}"
-        "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
-        "{% elif message['role'] == 'user' %}"
-        "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
-        "{% elif message['role'] == 'assistant' %}"
-        "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
-        "{% endif %}"
-        "{% endfor %}"
-        "{% if add_generation_prompt %}"
-        "<|im_start|>assistant\n"
-        "{% endif %}"
-    )
+# # Set Qwen chat template if not present (using ChatML format)
+# if tokenizer.chat_template is None:
+#     tokenizer.chat_template = (
+#         "{% for message in messages %}"
+#         "{% if message['role'] == 'system' %}"
+#         "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
+#         "{% elif message['role'] == 'user' %}"
+#         "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
+#         "{% elif message['role'] == 'assistant' %}"
+#         "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
+#         "{% endif %}"
+#         "{% endfor %}"
+#         "{% if add_generation_prompt %}"
+#         "<|im_start|>assistant\n"
+#         "{% endif %}"
+#     )
 
 def build_cross_encoder_inputs(examples):
     """
@@ -152,7 +152,7 @@ model = AutoModelForSequenceClassification.from_pretrained(
 )
 
 # Configure padding token for the model
-model.config.pad_token_id = tokenizer.pad_token_id
+# model.config.pad_token_id = tokenizer.pad_token_id
 
 total_params = sum(p.numel() for p in model.parameters())
 trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -197,17 +197,23 @@ model = AutoModelForSequenceClassification.from_pretrained(
     num_labels=2,
     torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
 )
-model.config.pad_token_id = tokenizer.pad_token_id
+# model.config.pad_token_id = tokenizer.pad_token_id
 
 # Apply LoRA for parameter-efficient fine-tuning
 print("\nApplying LoRA configuration...")
 lora_config = LoraConfig(
-    r=16,  # Reduced LoRA rank for memory efficiency
-    lora_alpha=32,
-    target_modules=["q_proj", "v_proj"],  # Reduced target modules for memory
-    lora_dropout=0.1,
+    r=64,  # Reduced LoRA rank for memory efficiency
+    lora_alpha=128,
+    # target_modules=["q_proj", "v_proj"],  # Reduced target modules for memory
+    lora_dropout=0,
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
+    target_modules = [
+        "q_proj", "k_proj", "v_proj", "o_proj",
+        "gate_proj", "up_proj", "down_proj",
+    ],
+    # lora_alpha = lora_rank*2,
+    random_state = 3407,
 )
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
@@ -220,7 +226,7 @@ if device.type == "cuda":
 
 # Training arguments optimized for LoRA + sequence classification
 training_args = TrainingArguments(
-    output_dir="./qwen3_cross_encoder_sft_10epochs",
+    output_dir="./qwen3_cross_encoder_sft_10epochs_new",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=1,  # Minimum for memory constraints
     gradient_accumulation_steps=16,  # Maintain effective batch size of 16
@@ -230,7 +236,8 @@ training_args = TrainingArguments(
     warmup_steps=50,
     lr_scheduler_type="linear",
     optim="adamw_8bit",
-    logging_steps=1,
+    # logging_steps=1,
+    logging_strategy="epoch",
     save_steps=500,
     save_total_limit=10,
     report_to="none",  # Can use Weights & Biases
@@ -242,7 +249,7 @@ training_args = TrainingArguments(
     fp16=False,
     bf16=True,  # Use bfloat16 for stability
     gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
-    max_grad_norm=1.0,  # Gradient clipping
+    # max_grad_norm=1.0,  # Gradient clipping
 )
 
 # Create data collator
