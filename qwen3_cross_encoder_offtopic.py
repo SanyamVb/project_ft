@@ -7,8 +7,9 @@ from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
     DataCollatorWithPadding,
+    TrainingArguments,
+    Trainer,
 )
-from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score
@@ -211,8 +212,8 @@ lora_config = LoraConfig(
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
 
-# SFT training arguments optimized for LoRA + sequence classification
-training_args = SFTConfig(
+# Training arguments optimized for LoRA + sequence classification
+training_args = TrainingArguments(
     output_dir="./qwen3_cross_encoder_sft_10epochs",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=4,
@@ -226,23 +227,20 @@ training_args = SFTConfig(
     save_steps=500,
     save_total_limit=10,
     report_to="none",  # Can use Weights & Biases
-    max_length=4096,
     eval_strategy="epoch",  # Evaluate after each epoch
     save_strategy="epoch",  # Save after each epoch
     load_best_model_at_end=True,  # Load best model based on evaluation metric
     metric_for_best_model="kappa",  # Use kappa as the metric for best model
     greater_is_better=True,  # Higher kappa is better
-    # SFT-specific: skip dataset preparation since we handle tokenization ourselves
-    dataset_text_field=None,
-    dataset_kwargs={"skip_prepare_dataset": True},
-    packing=False,
+    fp16=False,
+    bf16=True,  # Use bfloat16 for stability
 )
 
 # Create data collator
 data_collator = DataCollatorWithPadding(tokenizer, padding=True)
 
-# Create SFT trainer once
-trainer = SFTTrainer(
+# Create trainer
+trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=train_hf,
