@@ -202,9 +202,9 @@ model.config.pad_token_id = tokenizer.pad_token_id
 # Apply LoRA for parameter-efficient fine-tuning
 print("\nApplying LoRA configuration...")
 lora_config = LoraConfig(
-    r=32,  # LoRA rank (same as qwen_pipeline)
+    r=16,  # Reduced LoRA rank for memory efficiency
     lora_alpha=32,
-    target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],  # All attention projection layers
+    target_modules=["q_proj", "v_proj"],  # Reduced target modules for memory
     lora_dropout=0.1,
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
@@ -212,12 +212,19 @@ lora_config = LoraConfig(
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
 
+# Clear CUDA cache to free up memory
+if device.type == "cuda":
+    torch.cuda.empty_cache()
+    print(f"GPU memory allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+    print(f"GPU memory reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB")
+
 # Training arguments optimized for LoRA + sequence classification
 training_args = TrainingArguments(
     output_dir="./qwen3_cross_encoder_sft_10epochs",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
-    per_device_train_batch_size=2,
-    gradient_accumulation_steps=2,  # Increase to 4 for smoother training
+    per_device_train_batch_size=1,  # Minimum for memory constraints
+    gradient_accumulation_steps=16,  # Maintain effective batch size of 16
+    per_device_eval_batch_size=1,  # Reduced eval batch size
     learning_rate=2e-5,  # Optimized learning rate
     weight_decay=0.001,
     warmup_steps=50,
@@ -234,6 +241,8 @@ training_args = TrainingArguments(
     greater_is_better=True,  # Higher kappa is better
     fp16=False,
     bf16=True,  # Use bfloat16 for stability
+    gradient_checkpointing=True,  # Enable gradient checkpointing to save memory
+    max_grad_norm=1.0,  # Gradient clipping
 )
 
 # Create data collator
@@ -253,6 +262,11 @@ trainer = Trainer(
 print(f"\n{'='*80}")
 print("Starting Training for 10 Epochs")
 print(f"{'='*80}\n")
+
+# Clear CUDA cache before training
+if device.type == "cuda":
+    torch.cuda.empty_cache()
+    print(f"Pre-training GPU memory: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB allocated")
 
 train_result = trainer.train()
 
