@@ -135,6 +135,10 @@ test_hf = test_hf.map(
     remove_columns=["Prompt Topic", "Prompt Sub Topic", "Prompt Script", "Machine Transciption", "Level"]
 )
 
+# Rename 'label' to 'labels' (required by trainer)
+train_hf = train_hf.rename_column("label", "labels")
+test_hf = test_hf.rename_column("label", "labels")
+
 print(f"Train features: {train_hf.features}")
 print(f"Example token count: {len(train_hf[0]['input_ids'])}")
 
