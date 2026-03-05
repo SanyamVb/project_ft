@@ -6,10 +6,9 @@ import time
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
-    TrainingArguments,
-    Trainer,
     DataCollatorWithPadding,
 )
+from trl import SFTConfig, SFTTrainer
 from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset
 from sklearn.metrics import classification_report, confusion_matrix, cohen_kappa_score
@@ -190,39 +189,45 @@ lora_config = LoraConfig(
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
 
-# Training arguments optimized for LoRA + sequence classification
+# SFT training arguments optimized for LoRA + sequence classification
 # Set num_train_epochs=1 to train incrementally
-training_args = TrainingArguments(
+training_args = SFTConfig(
     output_dir="./qwen3_cross_encoder_output",
     num_train_epochs=1,  # Train 1 epoch at a time
-    per_device_train_batch_size=1,  # Minimum batch size for memory constraints
-    gradient_accumulation_steps=16,   # Maintain effective batch size of 16
-    per_device_eval_batch_size=2,    # Reduced eval batch size
-    learning_rate=5e-5,  # Higher LR for LoRA (typical range: 1e-4 to 5e-4)
-    weight_decay=0.01,
-    warmup_ratio=0.1,
-    max_grad_norm=0.3,  # Gradient clipping to prevent NaN
-    lr_scheduler_type="cosine",
+    per_device_train_batch_size=4,
+    gradient_accumulation_steps=4,   # Effective batch size of 16
+    per_device_eval_batch_size=2,
+    learning_rate=2e-6,
+    weight_decay=0.001,
+    warmup_steps=50,
+    lr_scheduler_type="linear",
     eval_strategy="no",  # We'll manually evaluate after each epoch
     save_strategy="no",  # We'll manually save after each epoch
-    logging_steps=10,
+    logging_steps=1,
     report_to="none",
-    fp16=False,  # Disabled - causes gradient scaling errors
-    bf16=True if device.type == "cuda" else False,  # Use bf16 for better stability
-    gradient_checkpointing=False,  # Not needed with LoRA, can cause issues
-    optim="adamw_torch",
+    fp16=False,
+    bf16=True if device.type == "cuda" else False,
+    gradient_checkpointing=False,
+    optim="adamw_8bit",
+    save_steps=500,
+    save_total_limit=10,
+    # SFT-specific: skip dataset preparation since we handle tokenization ourselves
+    dataset_text_field=None,
+    dataset_kwargs={"skip_prepare_dataset": True},
+    packing=False,
+    completion_only_loss=False,
 )
 
 # Create data collator
 data_collator = DataCollatorWithPadding(tokenizer, padding=True)
 
-# Create trainer once
-trainer = Trainer(
+# Create SFT trainer
+trainer = SFTTrainer(
     model=model,
     args=training_args,
     train_dataset=train_hf,
     eval_dataset=test_hf,
-    processing_class=tokenizer,
+    tokenizer=tokenizer,
     data_collator=data_collator,
     compute_metrics=compute_metrics,
 )
