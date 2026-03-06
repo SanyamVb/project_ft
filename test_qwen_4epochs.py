@@ -1,7 +1,3 @@
-"""
-Mock pipeline test: mimics the full qwen3_cross_encoder_offtopic.py pipeline
-with only 4 samples (2 per class) to verify everything works end-to-end.
-"""
 import pandas as pd
 import numpy as np
 import torch
@@ -23,10 +19,14 @@ import json
 import warnings
 warnings.filterwarnings('ignore')
 
-MODEL_SIZE = "4B"
+# Using Qwen3 instead of DeBERTa
+# Available models: "Qwen/Qwen3-0.6B", "Qwen/Qwen3-4B", "Qwen/Qwen3-8B"
+# Set MODEL_SIZE to either "0.6B" or "4B"
+MODEL_SIZE = "4B"  # Change this to "0.6B" or "4B"
 MODEL_NAME = f"Qwen/Qwen3-{MODEL_SIZE}"
 MAX_LENGTH = 4096
 
+# System prompt from qwen_pipeline
 SYSTEM_PROMPT = """You are an expert at detecting whether the test-taker's response is strictly associated to the given prompt topic, prompt sub-topic and prompt script or not. Being off topic refers to the test-taker's response being either totally or atleast majorly unrelated to the prompt topic, prompt sub-topic and prompt script given to the test-taker. The test-taker is in a setting, where to pass, they have to genuinely provide a response based on the prompt topic, prompt sub-topic and prompt script given to them.
 GENERIC GUIDELINE FOR EVALUATION:
 Focus on the overall essence of the response rather than rigid criteria. Filler words and disfluencies are not any criteria for awarding off topic flag as true.
@@ -41,52 +41,62 @@ if device.type == "cuda":
     print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 print(f"PyTorch version: {torch.__version__}")
 print(f"\n{'='*80}")
-print(f"[MOCK TEST] RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
+print(f"TEST RUN - RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
 print(f"{'='*80}\n")
 
-# ---- Create mock data: 2 on-topic (label=0) + 2 off-topic (label=1) ----
-mock_data = {
-    "Prompt Topic": [
-        "Travel",
-        "Technology",
-        "Travel",
-        "Technology",
-    ],
-    "Prompt Sub Topic": [
-        "Vacation Planning",
-        "Smartphones",
-        "Vacation Planning",
-        "Smartphones",
-    ],
-    "Prompt Script": [
-        "Describe your ideal vacation destination and why you would like to visit there.",
-        "Talk about how smartphones have changed the way people communicate.",
-        "Describe your ideal vacation destination and why you would like to visit there.",
-        "Talk about how smartphones have changed the way people communicate.",
-    ],
-    "Machine Transciption": [
-        "I would love to visit Japan because of the culture and the food is amazing there.",
-        "Smartphones have changed communication by making it instant through messaging apps.",
-        "I think cooking pasta is very easy you just need water and salt and some sauce.",
-        "My favorite color is blue and I like to play football on weekends with my friends.",
-    ],
-    "Level": ["I", "A", "I", "A"],
-    "Human_Combined": [0, 0, 1, 1],
-}
+# Load data
+train_df = pd.read_excel("data/train_0216.xlsx")
+test_df = pd.read_excel("data/test_0216.xlsx")
 
-train_df = pd.DataFrame(mock_data)
-test_df = pd.DataFrame(mock_data)  # Use same data for test in mock
-
+label_map = {0: 0, 1: 1}  # Human_Combined is already 0/1
 train_df["label"] = train_df["Human_Combined"]
 test_df["label"] = test_df["Human_Combined"]
 
+# *** TEST MODE: Use only 2 samples per class ***
+print("="*80)
+print("TEST MODE: Filtering to 2 samples per class")
+print("="*80)
+train_class_0 = train_df[train_df["label"] == 0].head(2)
+train_class_1 = train_df[train_df["label"] == 1].head(2)
+train_df = pd.concat([train_class_0, train_class_1]).reset_index(drop=True)
+
+test_class_0 = test_df[test_df["label"] == 0].head(2)
+test_class_1 = test_df[test_df["label"] == 1].head(2)
+test_df = pd.concat([test_class_0, test_class_1]).reset_index(drop=True)
 print(f"Train: {len(train_df)} rows — {train_df['label'].value_counts().to_dict()}")
 print(f"Test:  {len(test_df)} rows — {test_df['label'].value_counts().to_dict()}")
+print("="*80 + "\n")
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
+# Important: Qwen3 models need a pad token
+# if tokenizer.pad_token is None:
+#     tokenizer.pad_token = tokenizer.eos_token
+#     tokenizer.pad_token_id = tokenizer.eos_token_id
+
+# # Set Qwen chat template if not present (using ChatML format)
+# if tokenizer.chat_template is None:
+#     tokenizer.chat_template = (
+#         "{% for message in messages %}"
+#         "{% if message['role'] == 'system' %}"
+#         "<|im_start|>system\n{{ message['content'] }}<|im_end|>\n"
+#         "{% elif message['role'] == 'user' %}"
+#         "<|im_start|>user\n{{ message['content'] }}<|im_end|>\n"
+#         "{% elif message['role'] == 'assistant' %}"
+#         "<|im_start|>assistant\n{{ message['content'] }}<|im_end|>\n"
+#         "{% endif %}"
+#         "{% endfor %}"
+#         "{% if add_generation_prompt %}"
+#         "<|im_start|>assistant\n"
+#         "{% endif %}"
+#     )
+
 def build_cross_encoder_inputs(examples):
+    """
+    Build inputs for Qwen3 sequence classification using proper chat template.
+    Formats messages with system + user roles, then applies Qwen's ChatML template.
+    """
     formatted_texts = []
     for i in range(len(examples["Prompt Script"])):
         user_content = f"""You are now given the below data:
@@ -97,45 +107,49 @@ Test-taker's response: {examples['Machine Transciption'][i]}
 Testing Proficiency Level: {examples['Level'][i]}
 
 Based on your expertise, determine if the test-taker's response is off-topic or not."""
-
+        
+        # Structure as proper chat messages
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_content}
         ]
-
+        
+        # Apply Qwen chat template with enable_thinking=False for classification
         formatted_text = tokenizer.apply_chat_template(
             messages,
             tokenize=False,
-            add_generation_prompt=False,
-            enable_thinking=False
+            add_generation_prompt=False,  # No generation needed for classification
+            enable_thinking=False  # Disable thinking mode for efficiency
         )
         formatted_texts.append(formatted_text)
-
+    
+    # Tokenize the formatted texts
     tokenized = tokenizer(
         formatted_texts,
         truncation=True,
         max_length=MAX_LENGTH,
-        padding=False,
+        padding=False,  # Will be handled by DataCollator
     )
-
+    
     return tokenized
 
-# Prepare datasets
+# Prepare datasets with qwen_pipeline columns
 cols_to_keep = ["Prompt Topic", "Prompt Sub Topic", "Prompt Script", "Machine Transciption", "Level", "label"]
 train_hf = Dataset.from_pandas(train_df[cols_to_keep], preserve_index=False)
 test_hf = Dataset.from_pandas(test_df[cols_to_keep], preserve_index=False)
 
 train_hf = train_hf.map(
-    build_cross_encoder_inputs,
-    batched=True,
+    build_cross_encoder_inputs, 
+    batched=True, 
     remove_columns=["Prompt Topic", "Prompt Sub Topic", "Prompt Script", "Machine Transciption", "Level"]
 )
 test_hf = test_hf.map(
-    build_cross_encoder_inputs,
-    batched=True,
+    build_cross_encoder_inputs, 
+    batched=True, 
     remove_columns=["Prompt Topic", "Prompt Sub Topic", "Prompt Script", "Machine Transciption", "Level"]
 )
 
+# Rename 'label' to 'labels' (required by trainer)
 train_hf = train_hf.rename_column("label", "labels")
 test_hf = test_hf.rename_column("label", "labels")
 
@@ -143,44 +157,50 @@ print(f"Train features: {train_hf.features}")
 print(f"Example token count: {len(train_hf[0]['input_ids'])}")
 
 def compute_metrics(eval_pred):
+    """Compute metrics for evaluation during training."""
     logits, labels = eval_pred
     preds = np.argmax(logits, axis=-1)
     acc = (preds == labels).mean()
     kappa = cohen_kappa_score(labels, preds)
-
+    
+    # Calculate confusion matrix for additional metrics
     cm = confusion_matrix(labels, preds)
-
+    
+    # Calculate recall for each class if confusion matrix is valid
     metrics = {
         "accuracy": float(acc),
         "kappa": float(kappa),
     }
-
+    
+    # Add per-class metrics if both classes are present
     if cm.shape == (2, 2):
         on_topic_recall = cm[0][0] / cm[0].sum() if cm[0].sum() > 0 else 0.0
         off_topic_recall = cm[1][1] / cm[1].sum() if cm[1].sum() > 0 else 0.0
         metrics["on_topic_recall"] = float(on_topic_recall)
         metrics["off_topic_recall"] = float(off_topic_recall)
-
+    
     return metrics
 
 # Create output directory
-MOCK_OUTPUT_DIR = "./mock_test_output"
-MOCK_MODEL_PATH = "models/mock_test"
-os.makedirs(MOCK_MODEL_PATH, exist_ok=True)
+os.makedirs("models/test_qwen3_cross_encoder", exist_ok=True)
 
-# Load model
-print(f"\nLoading {MODEL_NAME} for mock test...")
+# Store results for all epoch configurations
+all_epoch_results = {}
+
+# Load model once (will train incrementally)
+print(f"\nLoading {MODEL_NAME} for incremental training...")
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=2,
     torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
 )
+# model.config.pad_token_id = tokenizer.pad_token_id
 
-# Set random seed
+# Set random seed for reproducibility
 SEED = 3407
 set_seed(SEED)
 
-# Apply LoRA
+# Apply LoRA for parameter-efficient fine-tuning
 print("\nApplying LoRA configuration...")
 lora_config = LoraConfig(
     r=64,
@@ -189,45 +209,54 @@ lora_config = LoraConfig(
         "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj",
     ],
-    lora_dropout=0.0,
+    lora_dropout=0.0,  # Add dropout for regularization
     bias="none",
-    task_type=TaskType.SEQ_CLS,
+    task_type=TaskType.SEQ_CLS,  # Sequence classification task
+    # rng_seed = SEED,  # Set seed for reproducibility in LoRA initialization
 )
 model = get_peft_model(model, lora_config)
-model.print_trainable_parameters()
+model.print_trainable_parameters()  # Shows trainable vs total parameters
 
+# Clear CUDA cache to free up memory
 if device.type == "cuda":
     torch.cuda.empty_cache()
     print(f"GPU memory allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
     print(f"GPU memory reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB")
 
-# Training arguments — minimal for mock test
+# Training arguments optimized for LoRA + sequence classification
+# NOTE: Continue training from 2-epoch checkpoint for additional 2 epochs (total 4)
 training_args = TrainingArguments(
-    output_dir=MOCK_OUTPUT_DIR,
-    num_train_epochs=2,  # Just 2 epochs for quick test
-    per_device_train_batch_size=2,
-    gradient_accumulation_steps=1,  # No accumulation needed with 4 samples
-    per_device_eval_batch_size=4,
-    learning_rate=2e-5,
+    output_dir="./test_qwen3_cross_encoder_sft_4epochs",
+    num_train_epochs=4,  # Total 4 epochs (continue from epoch 2)
+    per_device_train_batch_size=2,  # Minimum for memory constraints
+    gradient_accumulation_steps=4,  # Effective batch size of 16
+    per_device_eval_batch_size=8,  # Increased eval batch size for faster evaluation
+    learning_rate=2e-5,  # Optimized learning rate
     weight_decay=0.001,
-    warmup_ratio=0.5,
-    lr_scheduler_type="linear",
-    optim="adamw_8bit",
+    warmup_ratio=0.5,  # Use ratio-based warmup (10% of training)
+    lr_scheduler_type="linear",  # Linear scheduler for better convergence
+    optim="adamw_8bit",  # Full precision optimizer
+    # logging_steps=1,
     logging_strategy="epoch",
-    save_total_limit=None,
-    report_to="none",
-    eval_strategy="epoch",
-    save_strategy="epoch",
-    load_best_model_at_end=False,
-    metric_for_best_model="kappa",
-    greater_is_better=True,
+    save_steps=500,
+    save_total_limit=None,  # Keep ALL epoch checkpoints for individual testing
+    report_to="none",  # Can use Weights & Biases
+    eval_strategy="epoch",  # Evaluate after each epoch
+    save_strategy="epoch",  # Save after each epoch
+    load_best_model_at_end=False,  # Don't load best - keep all checkpoints for testing
+    metric_for_best_model="kappa",  # Use kappa as the metric for best model
+    greater_is_better=True,  # Higher kappa is better
     fp16=False,
-    bf16=True,
-    gradient_checkpointing=False,
+    bf16=True,  # Use bfloat16 for stability
+    gradient_checkpointing=False,  # Disable gradient checkpointing
+    # max_grad_norm=0.3,  # Gradient clipping to prevent NaN
+    ignore_data_skip=False,  # Resume training from the correct data position
 )
 
+# Create data collator
 data_collator = DataCollatorWithPadding(tokenizer, padding=True)
 
+# Create trainer
 trainer = Trainer(
     model=model,
     args=training_args,
@@ -238,31 +267,59 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
+# Continue training from 2-epoch checkpoint for additional 2 epochs (total 4)
 print(f"\n{'='*80}")
-print("[MOCK] Starting Training for 2 Epochs")
+print("Resuming Training from 2-Epoch Checkpoint (TEST)")
+print("Training for additional 2 epochs (total 4)")
 print(f"{'='*80}\n")
 
+# Clear CUDA cache before training
 if device.type == "cuda":
     torch.cuda.empty_cache()
     print(f"Pre-training GPU memory: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB allocated")
 
-train_result = trainer.train()
+# Check if 2-epoch checkpoint exists
+checkpoint_path = "./test_qwen3_cross_encoder_sft_2epochs/checkpoint-2"
+if not os.path.exists(checkpoint_path):
+    print(f"WARNING: Checkpoint not found at {checkpoint_path}")
+    print("Looking for alternative checkpoint locations...")
+    # Try to find any checkpoint in the 2-epoch output directory
+    base_dir = "./test_qwen3_cross_encoder_sft_2epochs"
+    if os.path.exists(base_dir):
+        checkpoints = [d for d in os.listdir(base_dir) if d.startswith("checkpoint-")]
+        if checkpoints:
+            # Use the last checkpoint (highest epoch number)
+            checkpoints.sort(key=lambda x: int(x.split("-")[1]))
+            checkpoint_path = os.path.join(base_dir, checkpoints[-1])
+            print(f"Found checkpoint: {checkpoint_path}")
+        else:
+            print("No checkpoints found. Training from scratch...")
+            checkpoint_path = None
+    else:
+        print(f"Directory {base_dir} not found. Training from scratch...")
+        checkpoint_path = None
+else:
+    print(f"Resuming from checkpoint: {checkpoint_path}")
+
+train_result = trainer.train(resume_from_checkpoint=checkpoint_path)
 
 print(f"\n{'='*80}")
-print("[MOCK] Training Completed!")
+print("Training Completed!")
 print(f"{'='*80}\n")
 print(f"Total training time: {train_result.metrics.get('train_runtime', 0.0):.2f} seconds")
 
 # Save final model
-trainer.save_model(MOCK_MODEL_PATH)
-tokenizer.save_pretrained(MOCK_MODEL_PATH)
-print(f"\nFinal model saved to {MOCK_MODEL_PATH}")
+final_model_path = "models/test_qwen3_cross_encoder_sft_4epochs"
+trainer.save_model(final_model_path)
+tokenizer.save_pretrained(final_model_path)
+print(f"\nFinal model saved to {final_model_path}")
 
-# Post-training analysis
+# Post-training analysis: Threshold optimization and detailed evaluation
 print(f"\n{'='*80}")
-print("[MOCK] Post-Training Analysis: Threshold Optimization")
+print("Post-Training Analysis: Threshold Optimization")
 print(f"{'='*80}\n")
 
+# Get predictions on test set
 inference_start = time.time()
 preds_output = trainer.predict(test_hf)
 inference_end = time.time()
@@ -326,12 +383,16 @@ print(f"  Kappa: {kappa_default:.4f} -> {best['kappa']:.4f} ({best['kappa'] - ka
 print(f"  Accuracy: {acc_default:.4f} -> {best['accuracy']:.4f} ({best['accuracy'] - acc_default:+.4f})")
 
 # Save threshold optimization results
-results_df.to_csv(f"{MOCK_MODEL_PATH}/threshold_optimization.csv", index=False)
+results_df.to_csv(f"{final_model_path}/threshold_optimization.csv", index=False)
 
 # Save final metrics
 final_metrics = {
     "model_name": MODEL_NAME,
     "model_size": MODEL_SIZE,
+    "test_mode": True,
+    "num_train_samples": len(train_df),
+    "num_test_samples": len(test_df),
+    "resumed_from_checkpoint": checkpoint_path,
     "total_training_time": float(train_result.metrics.get('train_runtime', 0.0)),
     "inference_metrics": {
         "total_inference_time": float(inference_time),
@@ -356,10 +417,10 @@ final_metrics = {
     }
 }
 
-with open(f"{MOCK_MODEL_PATH}/final_metrics.json", "w") as f:
+with open(f"{final_model_path}/final_metrics.json", "w") as f:
     json.dump(final_metrics, f, indent=2)
 
-print(f"\nThreshold optimization and metrics saved to {MOCK_MODEL_PATH}")
+print(f"\nThreshold optimization and metrics saved to {final_model_path}")
 
 # Generate threshold optimization plot
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
@@ -369,7 +430,7 @@ ax1.plot(results_df["threshold"], results_df["kappa"], 'o-', linewidth=2, marker
 ax1.axvline(best['threshold'], color='red', linestyle='--', label=f"Best: {best['threshold']:.2f}")
 ax1.set_xlabel("Threshold")
 ax1.set_ylabel("Cohen's Kappa")
-ax1.set_title("[MOCK] Kappa vs Threshold")
+ax1.set_title("Kappa vs Threshold (TEST - 4 Epochs)")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
@@ -378,19 +439,20 @@ ax2.plot(results_df["threshold"], results_df["accuracy"], 'o-', linewidth=2, mar
 ax2.axvline(best['threshold'], color='red', linestyle='--', label=f"Best: {best['threshold']:.2f}")
 ax2.set_xlabel("Threshold")
 ax2.set_ylabel("Accuracy")
-ax2.set_title("[MOCK] Accuracy vs Threshold")
+ax2.set_title("Accuracy vs Threshold (TEST - 4 Epochs)")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig(f"{MOCK_MODEL_PATH}/threshold_optimization.png", dpi=300)
-print(f"Threshold optimization plot saved to {MOCK_MODEL_PATH}/threshold_optimization.png")
+plt.savefig(f"{final_model_path}/threshold_optimization.png", dpi=300)
+print(f"Threshold optimization plot saved to {final_model_path}/threshold_optimization.png")
 
-# Training history
+# Load training history from trainer logs if available
 print(f"\n{'='*80}")
-print("[MOCK] Training History Summary")
+print("Training History Summary")
 print(f"{'='*80}\n")
 
+# Try to load training history from trainer's log_history
 if hasattr(trainer.state, 'log_history') and trainer.state.log_history:
     history_df = pd.DataFrame(trainer.state.log_history)
     if 'epoch' in history_df.columns:
@@ -398,12 +460,13 @@ if hasattr(trainer.state, 'log_history') and trainer.state.log_history:
         epoch_metrics = history_df[history_df['epoch'].notna()].copy()
         if len(epoch_metrics) > 0:
             print(epoch_metrics[['epoch', 'loss', 'eval_accuracy', 'eval_kappa']].to_string(index=False))
-
-            history_df.to_csv(f"{MOCK_MODEL_PATH}/training_history.csv", index=False)
-            print(f"\nTraining history saved to {MOCK_MODEL_PATH}/training_history.csv")
+            
+            # Save training history
+            history_df.to_csv(f"{final_model_path}/training_history.csv", index=False)
+            print(f"\nTraining history saved to {final_model_path}/training_history.csv")
 else:
     print("Training history not available in this trainer state.")
 
 print("\n" + "="*80)
-print("[MOCK] ALL PIPELINE STEPS COMPLETED SUCCESSFULLY!")
+print("TEST EXPERIMENT (4 EPOCHS TOTAL) COMPLETED!")
 print("="*80)

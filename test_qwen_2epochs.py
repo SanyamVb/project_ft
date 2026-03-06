@@ -41,7 +41,7 @@ if device.type == "cuda":
     print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
 print(f"PyTorch version: {torch.__version__}")
 print(f"\n{'='*80}")
-print(f"RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
+print(f"TEST RUN - RUNNING PIPELINE FOR MODEL: {MODEL_NAME}")
 print(f"{'='*80}\n")
 
 # Load data
@@ -52,8 +52,20 @@ label_map = {0: 0, 1: 1}  # Human_Combined is already 0/1
 train_df["label"] = train_df["Human_Combined"]
 test_df["label"] = test_df["Human_Combined"]
 
-print(f"Train: {len(train_df)} rows ΓÇö {train_df['label'].value_counts().to_dict()}")
-print(f"Test:  {len(test_df)} rows ΓÇö {test_df['label'].value_counts().to_dict()}")
+# *** TEST MODE: Use only 2 samples per class ***
+print("="*80)
+print("TEST MODE: Filtering to 2 samples per class")
+print("="*80)
+train_class_0 = train_df[train_df["label"] == 0].head(2)
+train_class_1 = train_df[train_df["label"] == 1].head(2)
+train_df = pd.concat([train_class_0, train_class_1]).reset_index(drop=True)
+
+test_class_0 = test_df[test_df["label"] == 0].head(2)
+test_class_1 = test_df[test_df["label"] == 1].head(2)
+test_df = pd.concat([test_class_0, test_class_1]).reset_index(drop=True)
+print(f"Train: {len(train_df)} rows — {train_df['label'].value_counts().to_dict()}")
+print(f"Test:  {len(test_df)} rows — {test_df['label'].value_counts().to_dict()}")
+print("="*80 + "\n")
 
 # Load tokenizer
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -170,7 +182,7 @@ def compute_metrics(eval_pred):
     return metrics
 
 # Create output directory
-os.makedirs("models/qwen3_cross_encoder_offtopic", exist_ok=True)
+os.makedirs("models/test_qwen3_cross_encoder", exist_ok=True)
 
 # Store results for all epoch configurations
 all_epoch_results = {}
@@ -212,10 +224,9 @@ if device.type == "cuda":
     print(f"GPU memory reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB")
 
 # Training arguments optimized for LoRA + sequence classification
-# NOTE: Continue training from 10-epoch checkpoint for additional 10 epochs (total 20)
 training_args = TrainingArguments(
-    output_dir="./qwen3_cross_encoder_sft_20epochs_v1",
-    num_train_epochs=20,  # Total 20 epochs (continue from epoch 10)
+    output_dir="./test_qwen3_cross_encoder_sft_2epochs",
+    num_train_epochs=2,  # Train for 2 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=2,  # Minimum for memory constraints
     gradient_accumulation_steps=4,  # Effective batch size of 16
     per_device_eval_batch_size=8,  # Increased eval batch size for faster evaluation
@@ -238,7 +249,6 @@ training_args = TrainingArguments(
     bf16=True,  # Use bfloat16 for stability
     gradient_checkpointing=False,  # Disable gradient checkpointing
     # max_grad_norm=0.3,  # Gradient clipping to prevent NaN
-    ignore_data_skip=False,  # Resume training from the correct data position
 )
 
 # Create data collator
@@ -255,10 +265,9 @@ trainer = Trainer(
     compute_metrics=compute_metrics,
 )
 
-# Continue training from 10-epoch checkpoint for additional 10 epochs (total 20)
+# Train for 2 epochs with automatic evaluation after each epoch
 print(f"\n{'='*80}")
-print("Resuming Training from 10-Epoch Checkpoint")
-print("Training for additional 10 epochs (total 20)")
+print("Starting Training for 2 Epochs (TEST)")
 print(f"{'='*80}\n")
 
 # Clear CUDA cache before training
@@ -266,30 +275,7 @@ if device.type == "cuda":
     torch.cuda.empty_cache()
     print(f"Pre-training GPU memory: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB allocated")
 
-# Check if 10-epoch checkpoint exists
-checkpoint_path = "./qwen3_cross_encoder_sft_10epochs_v3/checkpoint-10"
-if not os.path.exists(checkpoint_path):
-    print(f"WARNING: Checkpoint not found at {checkpoint_path}")
-    print("Looking for alternative checkpoint locations...")
-    # Try to find any checkpoint in the 10-epoch output directory
-    base_dir = "./qwen3_cross_encoder_sft_10epochs_v3"
-    if os.path.exists(base_dir):
-        checkpoints = [d for d in os.listdir(base_dir) if d.startswith("checkpoint-")]
-        if checkpoints:
-            # Use the last checkpoint (highest epoch number)
-            checkpoints.sort(key=lambda x: int(x.split("-")[1]))
-            checkpoint_path = os.path.join(base_dir, checkpoints[-1])
-            print(f"Found checkpoint: {checkpoint_path}")
-        else:
-            print("No checkpoints found. Training from scratch...")
-            checkpoint_path = None
-    else:
-        print(f"Directory {base_dir} not found. Training from scratch...")
-        checkpoint_path = None
-else:
-    print(f"Resuming from checkpoint: {checkpoint_path}")
-
-train_result = trainer.train(resume_from_checkpoint=checkpoint_path)
+train_result = trainer.train()
 
 print(f"\n{'='*80}")
 print("Training Completed!")
@@ -297,7 +283,7 @@ print(f"{'='*80}\n")
 print(f"Total training time: {train_result.metrics.get('train_runtime', 0.0):.2f} seconds")
 
 # Save final model
-final_model_path = "models/qwen3_cross_encoder_sft_20epochs_v1"
+final_model_path = "models/test_qwen3_cross_encoder_sft_2epochs"
 trainer.save_model(final_model_path)
 tokenizer.save_pretrained(final_model_path)
 print(f"\nFinal model saved to {final_model_path}")
@@ -377,6 +363,9 @@ results_df.to_csv(f"{final_model_path}/threshold_optimization.csv", index=False)
 final_metrics = {
     "model_name": MODEL_NAME,
     "model_size": MODEL_SIZE,
+    "test_mode": True,
+    "num_train_samples": len(train_df),
+    "num_test_samples": len(test_df),
     "total_training_time": float(train_result.metrics.get('train_runtime', 0.0)),
     "inference_metrics": {
         "total_inference_time": float(inference_time),
@@ -414,7 +403,7 @@ ax1.plot(results_df["threshold"], results_df["kappa"], 'o-', linewidth=2, marker
 ax1.axvline(best['threshold'], color='red', linestyle='--', label=f"Best: {best['threshold']:.2f}")
 ax1.set_xlabel("Threshold")
 ax1.set_ylabel("Cohen's Kappa")
-ax1.set_title("Kappa vs Threshold")
+ax1.set_title("Kappa vs Threshold (TEST)")
 ax1.legend()
 ax1.grid(True, alpha=0.3)
 
@@ -423,7 +412,7 @@ ax2.plot(results_df["threshold"], results_df["accuracy"], 'o-', linewidth=2, mar
 ax2.axvline(best['threshold'], color='red', linestyle='--', label=f"Best: {best['threshold']:.2f}")
 ax2.set_xlabel("Threshold")
 ax2.set_ylabel("Accuracy")
-ax2.set_title("Accuracy vs Threshold")
+ax2.set_title("Accuracy vs Threshold (TEST)")
 ax2.legend()
 ax2.grid(True, alpha=0.3)
 
@@ -452,5 +441,5 @@ else:
     print("Training history not available in this trainer state.")
 
 print("\n" + "="*80)
-print("ALL EXPERIMENTS COMPLETED!")
+print("TEST EXPERIMENT (2 EPOCHS) COMPLETED!")
 print("="*80)

@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Sequential training script
-# Runs 10-epoch training followed by 20-epoch training
+# Sequential TEST training script
+# Runs 2-epoch training on small dataset, then continues for 2 more epochs (total 4)
 
 echo "========================================"
-echo "Starting Sequential Training Pipeline"
+echo "Starting Sequential TEST Pipeline"
+echo "Using 2 samples per class (4 total)"
 echo "========================================"
 echo ""
 
@@ -16,14 +17,14 @@ cd "$SCRIPT_DIR"
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Training 1: 10 epochs
+# Training 1: 2 epochs (TEST)
 echo "========================================="
-echo "Step 1/2: Training with 10 epochs"
+echo "Step 1/2: Training with 2 epochs (TEST)"
 echo "Started at: $(date)"
 echo "========================================="
-python qwen3_cross_encoder_offtopic.py 2>&1 | tee logs/training_10epochs_$(date +%Y%m%d_%H%M%S).log
+python test_qwen_2epochs.py 2>&1 | tee logs/test_training_2epochs_$(date +%Y%m%d_%H%M%S).log
 echo ""
-echo "10-epoch training completed at: $(date)"
+echo "2-epoch TEST training completed at: $(date)"
 echo ""
 
 # Clear GPU memory before next training
@@ -45,17 +46,23 @@ echo ""
 sleep 2
 echo ""
 
-# Training 2: 20 epochs
+# Training 2: Resume from 2 epochs, train to 4 total (TEST)
 echo "========================================="
-echo "Step 2/2: Training with 20 epochs"
+echo "Step 2/2: Resuming from 2-epoch checkpoint"
+echo "Training to 4 total epochs (TEST)"
 echo "Started at: $(date)"
 echo "========================================="
-python qwen3_cross_encoder_offtopic_20.py 2>&1 | tee logs/training_20epochs_$(date +%Y%m%d_%H%M%S).log
+python test_qwen_4epochs.py 2>&1 | tee logs/test_training_4epochs_$(date +%Y%m%d_%H%M%S).log
 echo ""
-echo "20-epoch training completed at: $(date)"
+echo "4-epoch TEST training completed at: $(date)"
 echo ""
 
 echo "========================================"
-echo "All Training Completed!"
+echo "All TEST Training Completed!"
 echo "Finished at: $(date)"
 echo "========================================"
+echo ""
+echo "Summary:"
+echo "- 2-epoch model: ./models/test_qwen3_cross_encoder_sft_2epochs"
+echo "- 4-epoch model: ./models/test_qwen3_cross_encoder_sft_4epochs"
+echo "- Training logs: ./logs/"
