@@ -213,7 +213,7 @@ if device.type == "cuda":
 
 # Training arguments optimized for LoRA + sequence classification
 training_args = TrainingArguments(
-    output_dir="./qwen3_cross_encoder_sft_10epochs_new",
+    output_dir="./qwen3_cross_encoder_sft_10epochs_v3",
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=2,  # Minimum for memory constraints
     gradient_accumulation_steps=8,  # Maintain effective batch size of 16
@@ -271,7 +271,7 @@ print(f"{'='*80}\n")
 print(f"Total training time: {train_result.metrics.get('train_runtime', 0.0):.2f} seconds")
 
 # Save final model
-final_model_path = "models/qwen3_cross_encoder_sft_10epochs_final"
+final_model_path = "models/qwen3_cross_encoder_sft_10epochs_v3"
 trainer.save_model(final_model_path)
 tokenizer.save_pretrained(final_model_path)
 print(f"\nFinal model saved to {final_model_path}")
