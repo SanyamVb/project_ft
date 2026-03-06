@@ -197,7 +197,7 @@ lora_config = LoraConfig(
         "q_proj", "k_proj", "v_proj", "o_proj",
         "gate_proj", "up_proj", "down_proj",
     ],
-    lora_dropout=0.1,  # Add dropout for regularization
+    lora_dropout=0.0,  # Add dropout for regularization
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
     seed=SEED,
