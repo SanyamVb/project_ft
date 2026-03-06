@@ -200,7 +200,7 @@ lora_config = LoraConfig(
     lora_dropout=0.0,  # Add dropout for regularization
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
-    rng_seed = SEED,  # Set seed for reproducibility in LoRA initialization
+    # rng_seed = SEED,  # Set seed for reproducibility in LoRA initialization
 )
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
