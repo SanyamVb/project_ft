@@ -3,13 +3,13 @@ import numpy as np
 import torch
 import os
 import time
-import random
 from transformers import (
     AutoTokenizer,
     AutoModelForSequenceClassification,
     DataCollatorWithPadding,
     TrainingArguments,
     Trainer,
+    set_seed,
 )
 from peft import LoraConfig, get_peft_model, TaskType
 from datasets import Dataset
@@ -144,22 +144,6 @@ test_hf = test_hf.rename_column("label", "labels")
 print(f"Train features: {train_hf.features}")
 print(f"Example token count: {len(train_hf[0]['input_ids'])}")
 
-# Load model using AutoModelForSequenceClassification
-print(f"\nLoading {MODEL_NAME} for sequence classification...")
-model = AutoModelForSequenceClassification.from_pretrained(
-    MODEL_NAME,
-    num_labels=2,
-    torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
-)
-
-# Configure padding token for the model
-# model.config.pad_token_id = tokenizer.pad_token_id
-
-total_params = sum(p.numel() for p in model.parameters())
-trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-print(f"Total parameters: {total_params:,} ({total_params/1e6:.0f}M)")
-print(f"Trainable parameters: {trainable_params:,} ({trainable_params/1e6:.0f}M)")
-
 def compute_metrics(eval_pred):
     """Compute metrics for evaluation during training."""
     logits, labels = eval_pred
@@ -202,16 +186,12 @@ model = AutoModelForSequenceClassification.from_pretrained(
 
 # Set random seed for reproducibility
 SEED = 3407
-random.seed(SEED)
-np.random.seed(SEED)
-torch.manual_seed(SEED)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(SEED)
+set_seed(SEED)
 
 # Apply LoRA for parameter-efficient fine-tuning
 print("\nApplying LoRA configuration...")
 lora_config = LoraConfig(
-    r=64,  # Reduced LoRA rank for memory efficiency
+    r=64,
     lora_alpha=128,
     target_modules=[
         "q_proj", "k_proj", "v_proj", "o_proj",
@@ -220,6 +200,7 @@ lora_config = LoraConfig(
     lora_dropout=0.1,  # Add dropout for regularization
     bias="none",
     task_type=TaskType.SEQ_CLS,  # Sequence classification task
+    seed=SEED,
 )
 model = get_peft_model(model, lora_config)
 model.print_trainable_parameters()  # Shows trainable vs total parameters
@@ -236,7 +217,7 @@ training_args = TrainingArguments(
     num_train_epochs=10,  # Train for 10 epochs with proper scheduler/optimizer state
     per_device_train_batch_size=2,  # Minimum for memory constraints
     gradient_accumulation_steps=8,  # Maintain effective batch size of 16
-    per_device_eval_batch_size=2,  # Increased eval batch size for faster evaluation
+    per_device_eval_batch_size=8,  # Increased eval batch size for faster evaluation
     learning_rate=2e-5,  # Optimized learning rate
     weight_decay=0.001,
     warmup_ratio=0.1,  # Use ratio-based warmup (10% of training)
@@ -255,7 +236,7 @@ training_args = TrainingArguments(
     fp16=False,
     bf16=True,  # Use bfloat16 for stability
     gradient_checkpointing=False,  # Disable gradient checkpointing
-    max_grad_norm=0.3,  # Gradient clipping to prevent NaN
+    # max_grad_norm=0.3,  # Gradient clipping to prevent NaN
 )
 
 # Create data collator
