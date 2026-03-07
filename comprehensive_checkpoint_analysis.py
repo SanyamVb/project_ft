@@ -449,6 +449,12 @@ def main():
     print(f"\nLoading tokenizer from {MODEL_NAME}...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     
+    # Set padding token for Qwen3 (required for batch processing)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        print(f"Set pad_token to eos_token: {tokenizer.pad_token}")
+    
     # Prepare test dataset
     test_hf = prepare_test_dataset(test_df, tokenizer)
     
