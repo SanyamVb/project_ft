@@ -25,7 +25,6 @@ from sklearn.metrics import (
     precision_recall_fscore_support
 )
 import matplotlib.pyplot as plt
-import seaborn as sns
 from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
@@ -237,9 +236,17 @@ def save_epoch_results(epoch, checkpoint_num, metrics, predictions, labels, prob
     # Save confusion matrix visualization
     plt.figure(figsize=(8, 6))
     cm = np.array(metrics["confusion_matrix"])
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=["On-Topic", "Off-Topic"],
-                yticklabels=["On-Topic", "Off-Topic"])
+    im = plt.imshow(cm, interpolation='nearest', cmap='Blues')
+    plt.colorbar(im)
+    
+    # Add text annotations
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            plt.text(j, i, str(cm[i, j]), ha='center', va='center', color='black' if cm[i, j] < cm.max()/2 else 'white', fontsize=14)
+    
+    tick_marks = np.arange(2)
+    plt.xticks(tick_marks, ["On-Topic", "Off-Topic"])
+    plt.yticks(tick_marks, ["On-Topic", "Off-Topic"])
     plt.title(f"Confusion Matrix - Epoch {epoch}")
     plt.ylabel("True Label")
     plt.xlabel("Predicted Label")
@@ -341,9 +348,6 @@ def create_summary_report(all_results):
 
 def create_comparison_plots(summary_df, output_dir):
     """Create comprehensive visualizations comparing all epochs."""
-    
-    # Set style
-    sns.set_style("whitegrid")
     
     # Create figure with subplots
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
