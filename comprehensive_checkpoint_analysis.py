@@ -489,6 +489,9 @@ def main():
                 torch_dtype=torch.bfloat16 if device.type == "cuda" else torch.float32,
             )
             
+            # Set pad_token_id in model config to match tokenizer
+            base_model.config.pad_token_id = tokenizer.pad_token_id
+            
             # Load LoRA weights
             model = PeftModel.from_pretrained(base_model, checkpoint_path)
             model = model.to(device)
