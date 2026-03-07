@@ -163,9 +163,10 @@ def run_inference(model, tokenizer, test_hf, batch_size=8):
             probs = torch.softmax(logits, dim=-1)
             preds = torch.argmax(logits, dim=-1)
             
+            # Convert to float32 before numpy (bfloat16 not supported by numpy)
             all_predictions.extend(preds.cpu().numpy())
             all_labels.extend(labels.numpy())
-            all_probs.extend(probs[:, 1].cpu().numpy())  # Probability of class 1 (off-topic)
+            all_probs.extend(probs[:, 1].cpu().float().numpy())  # Convert to float32 first
     
     inference_time = time.time() - start_time
     
