@@ -187,9 +187,9 @@ if device.type == "cuda":
 training_args = TrainingArguments(
     output_dir="./qwen3_gen_prompt_true_20epochs",
     num_train_epochs=20,
-    per_device_train_batch_size=2,
-    gradient_accumulation_steps=4,
-    per_device_eval_batch_size=8,
+    per_device_train_batch_size=1,  # Reduced to 1 for memory
+    gradient_accumulation_steps=8,  # Increased to maintain effective batch size of 8
+    per_device_eval_batch_size=4,  # Reduced for memory
     learning_rate=2e-5,
     weight_decay=0.001,
     warmup_ratio=0.5,
